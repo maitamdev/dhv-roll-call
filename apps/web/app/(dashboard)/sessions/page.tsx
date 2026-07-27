@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
-import { Calendar, Play, Square, Loader2, X, Plus } from 'lucide-react';
+import { Calendar, Play, Square, Loader2, X, Plus, Hash } from 'lucide-react';
+import { fetchSessionsAdmin, fetchCourseSectionsAdmin, createSessionAdmin } from './actions';
 
 export default function SessionsListPage() {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -20,73 +20,49 @@ export default function SessionsListPage() {
     end_time: '09:00',
   });
 
-  const fetchSessions = async () => {
+  const loadData = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('attendance_sessions')
-      .select(`
-        id, status, scheduled_start, scheduled_end,
-        course_sections (
-          id, section_code,
-          courses (course_name),
-          classes (class_name)
-        )
-      `)
-      .order('scheduled_start', { ascending: false });
+    const [sessionsData, sectionsData] = await Promise.all([
+      fetchSessionsAdmin(),
+      fetchCourseSectionsAdmin()
+    ]);
     
-    if (data) setSessions(data);
+    setSessions(sessionsData);
+    setSections(sectionsData);
+    if (sectionsData.length > 0 && !formData.course_section_id) {
+      setFormData(prev => ({ ...prev, course_section_id: sectionsData[0].id }));
+    }
     setLoading(false);
   };
 
-  const fetchSections = async () => {
-    const { data } = await supabase
-      .from('course_sections')
-      .select(`
-        id, section_code,
-        courses (course_name),
-        classes (class_name)
-      `);
-    if (data) {
-      setSections(data);
-      if (data.length > 0) {
-        setFormData(prev => ({ ...prev, course_section_id: data[0].id }));
-      }
-    }
-  };
-
   useEffect(() => {
-    fetchSessions();
-    fetchSections();
+    loadData();
   }, []);
 
   const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Generate a random 6-digit token
     const token = Math.floor(100000 + Math.random() * 900000).toString();
-    
     const startDateTime = new Date(`${formData.date}T${formData.start_time}:00`).toISOString();
     const endDateTime = new Date(`${formData.date}T${formData.end_time}:00`).toISOString();
     const scanDeadline = endDateTime;
-    // Allow late after 30 minutes
     const lateAfter = new Date(new Date(`${formData.date}T${formData.start_time}:00`).getTime() + 30 * 60000).toISOString();
 
-    const { error } = await supabase.from('attendance_sessions').insert({
+    const result = await createSessionAdmin({
       course_section_id: formData.course_section_id,
-      scheduled_start: startDateTime,
-      scheduled_end: endDateTime,
-      scan_deadline: scanDeadline,
-      late_after: lateAfter,
-      status: 'OPEN',
-      session_token: token
+      startDateTime,
+      endDateTime,
+      scanDeadline,
+      lateAfter,
+      token
     });
 
-    if (!error) {
+    if (result.success) {
       setShowModal(false);
-      fetchSessions();
+      loadData();
     } else {
-      alert('Lỗi tạo phiên: ' + error.message);
+      alert('Lỗi tạo phiên: ' + result.error);
     }
     setIsSubmitting(false);
   };
