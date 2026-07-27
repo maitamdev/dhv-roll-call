@@ -38,7 +38,7 @@ export async function fetchCourseSectionsAdmin() {
   return data || [];
 }
 
-export async function createSessionAdmin(formData: {
+export async function createSessionAdmin(payload: {
   course_section_id: string;
   startDateTime: string;
   endDateTime: string;
@@ -47,18 +47,39 @@ export async function createSessionAdmin(formData: {
   token: string;
 }) {
   const { data, error } = await supabaseAdmin.from('attendance_sessions').insert({
-    course_section_id: formData.course_section_id,
-    scheduled_start: formData.startDateTime,
-    scheduled_end: formData.endDateTime,
-    scan_deadline: formData.scanDeadline,
-    late_after: formData.lateAfter,
+    course_section_id: payload.course_section_id,
+    scheduled_start: payload.startDateTime,
+    scheduled_end: payload.endDateTime,
+    scan_deadline: payload.scanDeadline,
+    late_after: payload.lateAfter,
     status: 'OPEN',
-    session_token: formData.token
+    session_token: payload.token
   }).select().single();
 
   if (error) {
     return { success: false, error: error.message };
   }
+
+  // Pre-populate attendance_records with NOT_MARKED for all enrolled students
+  try {
+    const { data: enrollments } = await supabaseAdmin
+      .from('enrollments')
+      .select('student_id')
+      .eq('course_section_id', payload.course_section_id);
+
+    if (enrollments && enrollments.length > 0) {
+      const recordsToInsert = enrollments.map(e => ({
+        session_id: data.id,
+        student_id: e.student_id,
+        status: 'NOT_MARKED',
+        source: 'SYSTEM_GENERATED'
+      }));
+      await supabaseAdmin.from('attendance_records').insert(recordsToInsert);
+    }
+  } catch (err) {
+    console.error('Failed to pre-populate attendance records:', err);
+  }
+
   return { success: true, data };
 }
 
