@@ -205,6 +205,8 @@ export async function POST(req: NextRequest) {
       const { error: updateErr } = await supabaseAdmin
         .from('attendance_records')
         .update({
+          session_id: session.id, // Force inclusion in Realtime payload for filter
+          student_id: studentId,
           status: finalStatus,
           first_scan_at: nowIso,
           last_scan_at: nowIso,
