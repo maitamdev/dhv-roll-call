@@ -7,7 +7,12 @@ export async function POST(req: NextRequest) {
   const startTime = Date.now();
   try {
     const body: NFCScanRequestPayload = await req.json();
-    const { sessionId, cardUid, deviceId, clientScannedAt, source, requestId } = body;
+    let { sessionId, cardUid, deviceId, clientScannedAt, source, requestId } = body;
+    
+    // Auto strip '#' from sessionId in case user typed it from the UI
+    if (sessionId && sessionId.startsWith('#')) {
+      sessionId = sessionId.substring(1);
+    }
 
     if (!sessionId || !cardUid || !requestId) {
       return NextResponse.json<NFCScanResponsePayload>({
