@@ -1,11 +1,7 @@
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabase';
-import crypto from 'crypto';
-
-function hashCardUid(uid: string) {
-  return crypto.createHash('sha256').update(uid.toUpperCase().replace(/[^A-F0-9]/g, '')).digest('hex');
-}
+import { hashCardUid, normalizeCardUid } from '@/lib/crypto';
 
 export async function fetchCardsAdmin() {
   const { data, error } = await supabaseAdmin
