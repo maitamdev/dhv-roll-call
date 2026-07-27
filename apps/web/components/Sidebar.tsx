@@ -15,11 +15,11 @@ import { cn } from '@/lib/utils';
 
 const sidebarLinks = [
   { name: 'Tổng quan', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Lịch học', href: '/dashboard/schedules', icon: CalendarDays },
-  { name: 'Sinh viên', href: '/dashboard/students', icon: Users },
-  { name: 'Phiên điểm danh', href: '/dashboard/sessions', icon: Nfc },
-  { name: 'Quản lý Thẻ NFC', href: '/dashboard/cards', icon: GraduationCap },
-  { name: 'Cài đặt', href: '/dashboard/settings', icon: Settings },
+  { name: 'Lịch học', href: '/schedules', icon: CalendarDays },
+  { name: 'Sinh viên', href: '/students', icon: Users },
+  { name: 'Phiên điểm danh', href: '/sessions', icon: Nfc },
+  { name: 'Quản lý Thẻ NFC', href: '/cards', icon: GraduationCap },
+  { name: 'Cài đặt', href: '/settings', icon: Settings },
 ];
 
 export default function Sidebar() {
