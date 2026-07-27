@@ -112,11 +112,15 @@ export default function LiveAttendancePage() {
       .channel(`live_attendance_${sessionInfo.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'attendance_records', filter: `session_id=eq.${sessionInfo.id}` },
+        { event: '*', schema: 'public', table: 'attendance_records' }, // Bypass filter issue
         (payload) => {
           console.log('Realtime change:', payload);
-          playBeep('success');
-          fetchSessionAndRecords();
+          // If the payload has a session_id, verify it. If missing (due to replica default), just fetch anyway!
+          const newRec = payload.new as any;
+          if (!newRec.session_id || newRec.session_id === sessionInfo.id) {
+            playBeep('success');
+            fetchSessionAndRecords();
+          }
         }
       )
       .subscribe();
