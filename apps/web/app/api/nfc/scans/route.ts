@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
       // Log failed scan event
       await supabaseAdmin.from('scan_events').insert({
         request_id: requestId,
-        session_id: sessionId,
+        session_id: session.id,
         card_uid_hash: targetUidHash,
         device_id: deviceId || null,
         client_scanned_at: clientScannedAt || new Date().toISOString(),
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     if (!enrollment) {
       await supabaseAdmin.from('scan_events').insert({
         request_id: requestId,
-        session_id: sessionId,
+        session_id: session.id,
         card_uid_hash: targetUidHash,
         device_id: deviceId || null,
         client_scanned_at: clientScannedAt || new Date().toISOString(),
@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
     const { data: existingRecord } = await supabaseAdmin
       .from('attendance_records')
       .select('id, status, first_scan_at')
-      .eq('session_id', sessionId)
+      .eq('session_id', session.id)
       .eq('student_id', studentId)
       .single();
 
@@ -196,7 +196,7 @@ export async function POST(req: NextRequest) {
     // 8. Update / Insert Attendance Record
     const nowIso = scanTime.toISOString();
     if (existingRecord) {
-      await supabaseAdmin
+      const { error: updateErr } = await supabaseAdmin
         .from('attendance_records')
         .update({
           status: finalStatus,
@@ -207,11 +207,12 @@ export async function POST(req: NextRequest) {
           updated_at: new Date().toISOString()
         })
         .eq('id', existingRecord.id);
+      if (updateErr) throw new Error(updateErr.message);
     } else {
-      await supabaseAdmin
+      const { error: insertErr } = await supabaseAdmin
         .from('attendance_records')
         .insert({
-          session_id: sessionId,
+          session_id: session.id,
           student_id: studentId,
           status: finalStatus,
           first_scan_at: nowIso,
@@ -219,12 +220,13 @@ export async function POST(req: NextRequest) {
           device_id: deviceId || null,
           source: source
         });
+      if (insertErr) throw new Error(insertErr.message);
     }
 
     // 9. Record Scan Event Audit
     await supabaseAdmin.from('scan_events').insert({
       request_id: requestId,
-      session_id: sessionId,
+      session_id: session.id,
       card_uid_hash: targetUidHash,
       device_id: deviceId || null,
       client_scanned_at: nowIso,
