@@ -61,3 +61,37 @@ export async function createSessionAdmin(formData: {
   }
   return { success: true, data };
 }
+
+export async function fetchLiveSessionAdmin(sessionId: string) {
+  const { data: session } = await supabaseAdmin
+    .from('attendance_sessions')
+    .select(`
+      id, status, scheduled_start, scheduled_end, late_after, session_token,
+      course_sections (
+        section_code,
+        courses (course_name, course_code),
+        classes (class_name),
+        lecturers (full_name)
+      ),
+      rooms (room_code)
+    `)
+    .eq('id', sessionId)
+    .single();
+
+  const { data: recs } = await supabaseAdmin
+    .from('attendance_records')
+    .select(`
+      id, session_id, student_id, status, first_scan_at, source,
+      students (
+        id, student_code, full_name, avatar_url,
+        classes (class_name)
+      )
+    `)
+    .eq('session_id', sessionId);
+
+  const { data: stList } = await supabaseAdmin
+    .from('students')
+    .select('id, student_code, full_name');
+
+  return { session, records: recs || [], students: stList || [] };
+}
