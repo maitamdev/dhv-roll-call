@@ -14,10 +14,10 @@ export async function POST(req: NextRequest) {
       sessionId = sessionId.substring(1);
     }
 
-    // Validate deviceId format (must be UUID), otherwise set to null
+    // Validate deviceId format (must be UUID), otherwise set to undefined
     const isUuidDevice = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId || '');
     if (!isUuidDevice) {
-      deviceId = null;
+      deviceId = undefined;
     }
 
     if (!sessionId || !cardUid || !requestId) {
