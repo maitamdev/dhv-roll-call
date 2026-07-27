@@ -124,6 +124,8 @@ export async function POST(req: NextRequest) {
 
     const studentData = Array.isArray(card.students) ? card.students[0] : card.students;
     const studentId = studentData.id;
+    const studentClassData = Array.isArray(studentData.classes) ? studentData.classes[0] : studentData.classes;
+    const studentClassName = (studentClassData as any)?.class_name || '';
 
     // 5. Check Enrollment in Course Section
     const { data: enrollment } = await supabaseAdmin
@@ -168,7 +170,7 @@ export async function POST(req: NextRequest) {
           id: studentData.id,
           studentCode: studentData.student_code,
           fullName: studentData.full_name,
-          className: studentData.classes?.class_name || '',
+          className: studentClassName,
           email: '',
           avatarUrl: studentData.avatar_url || '',
           status: 'ACTIVE'
@@ -233,7 +235,7 @@ export async function POST(req: NextRequest) {
         id: studentData.id,
         studentCode: studentData.student_code,
         fullName: studentData.full_name,
-        className: studentData.classes?.class_name || '',
+        className: studentClassName,
         email: '',
         avatarUrl: studentData.avatar_url || '',
         status: 'ACTIVE'
