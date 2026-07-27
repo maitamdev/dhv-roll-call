@@ -67,6 +67,7 @@ export async function registerCardAdmin(studentId: string, uidHex: string) {
 
   const { data, error } = await supabaseAdmin.from('student_cards').upsert({
     uid_hash: uidHash,
+    uid_masked: `**:**:**:${uidHex.split(':').pop() || uidHex.slice(-2)}`,
     student_id: studentId,
     status: 'ACTIVE'
   }).select().single();
