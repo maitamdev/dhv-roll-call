@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 export default function LoginPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [role, setRole] = useState('STUDENT');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,8 +23,28 @@ export default function LoginPage() {
     <div className="space-y-6">
       <div className="text-center">
         <h2 className="text-xl font-semibold tracking-tight">Đăng nhập tài khoản</h2>
-        <p className="text-sm text-muted-foreground mt-2">
-          Nhập mã Sinh viên hoặc Email của bạn
+      </div>
+
+      <div className="flex bg-muted/50 p-1 rounded-md">
+        <button
+          type="button"
+          onClick={() => setRole('STUDENT')}
+          className={`flex-1 text-sm font-medium py-2 rounded-sm transition-colors ${role === 'STUDENT' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+        >
+          Sinh viên
+        </button>
+        <button
+          type="button"
+          onClick={() => setRole('LECTURER')}
+          className={`flex-1 text-sm font-medium py-2 rounded-sm transition-colors ${role === 'LECTURER' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+        >
+          Giảng viên
+        </button>
+      </div>
+
+      <div className="text-center">
+        <p className="text-sm text-muted-foreground">
+          {role === 'STUDENT' ? 'Nhập mã Sinh viên hoặc Email của bạn' : 'Nhập Email Giảng viên (dhv.edu.vn)'}
         </p>
       </div>
 
