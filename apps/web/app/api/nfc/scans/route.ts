@@ -32,7 +32,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2. Validate Session
+    // 2. Validate Session (Support both UUID and Short Token)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId);
     const { data: session, error: sessionErr } = await supabaseAdmin
       .from('attendance_sessions')
       .select(`
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest) {
           courses (course_name)
         )
       `)
-      .eq('id', sessionId)
+      .eq(isUuid ? 'id' : 'session_token', sessionId)
       .single();
 
     if (sessionErr || !session) {
