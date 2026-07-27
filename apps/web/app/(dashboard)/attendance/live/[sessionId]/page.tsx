@@ -20,6 +20,8 @@ interface StudentRecord {
   isNew?: boolean;
 }
 
+import { fetchLiveSessionAdmin } from '../../../sessions/actions';
+
 export default function LiveAttendancePage() {
   const params = useParams();
   const sessionId = (params?.sessionId as string) || 'ses11111-1111-1111-1111-111111111111';
@@ -61,39 +63,15 @@ export default function LiveAttendancePage() {
   const fetchSessionAndRecords = async () => {
     setLoading(true);
     try {
-      const { data: session } = await supabase
-        .from('attendance_sessions')
-        .select(`
-          id, status, scheduled_start, scheduled_end, late_after,
-          course_sections (
-            section_code,
-            courses (course_name, course_code),
-            classes (class_name),
-            lecturers (full_name)
-          ),
-          rooms (room_code)
-        `)
-        .eq('id', sessionId)
-        .single();
-
-      if (session) {
-        setSessionInfo(session);
-        setSessionStatus(session.status);
+      const data = await fetchLiveSessionAdmin(sessionId);
+      
+      if (data.session) {
+        setSessionInfo(data.session);
+        setSessionStatus(data.session.status);
       }
 
-      const { data: recs } = await supabase
-        .from('attendance_records')
-        .select(`
-          id, session_id, student_id, status, first_scan_at, source,
-          students (
-            id, student_code, full_name, avatar_url,
-            classes (class_name)
-          )
-        `)
-        .eq('session_id', sessionId);
-
-      if (recs) {
-        const formatted: StudentRecord[] = recs.map((r: any) => {
+      if (data.records) {
+        const formatted: StudentRecord[] = data.records.map((r: any) => {
           const student = Array.isArray(r.students) ? r.students[0] : r.students;
           const cls = Array.isArray(student?.classes) ? student.classes[0] : student?.classes;
           return {
@@ -110,13 +88,11 @@ export default function LiveAttendancePage() {
         setRecords(formatted);
       }
 
-      const { data: stList } = await supabase
-        .from('students')
-        .select('id, student_code, full_name');
-
-      if (stList && stList.length > 0) {
-        setStudentsList(stList);
-        setSelectedStudentId(stList[0].id);
+      if (data.students && data.students.length > 0) {
+        setStudentsList(data.students);
+        if (!selectedStudentId) {
+          setSelectedStudentId(data.students[0].id);
+        }
       }
     } catch (err) {
       console.error('Error fetching live session:', err);
@@ -264,7 +240,10 @@ export default function LiveAttendancePage() {
             }`}>
               {sessionStatus === 'OPEN' ? 'Đang điểm danh (Live)' : 'Phiên đã đóng'}
             </span>
-            <span className="text-xs text-muted-foreground font-medium">Hôm nay · 07:30 - 09:30</span>
+            <span className="flex items-center gap-1.5 px-3 py-1 bg-primary/10 text-primary font-mono font-bold rounded-sm border border-primary/20 text-sm">
+              <Hash className="w-4 h-4" />
+              {sessionInfo?.session_token || '------'}
+            </span>
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-foreground">

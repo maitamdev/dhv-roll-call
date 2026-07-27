@@ -104,8 +104,9 @@ export default function SessionsListPage() {
                     }`}>
                       {session.status}
                     </span>
-                    <span className="text-xs text-muted-foreground font-mono">
-                      {new Date(session.scheduled_start).toLocaleDateString('vi-VN')}
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary font-mono font-bold rounded-sm border border-primary/20 text-xs">
+                      <Hash className="w-3 h-3" />
+                      {session.session_token || '------'}
                     </span>
                   </div>
                   <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors line-clamp-1">
