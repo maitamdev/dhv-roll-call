@@ -3,31 +3,93 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Calendar, Play, Square, Loader2 } from 'lucide-react';
+import { Calendar, Play, Square, Loader2, X, Plus } from 'lucide-react';
 
 export default function SessionsListPage() {
   const [sessions, setSessions] = useState<any[]>([]);
+  const [sections, setSections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Modal state
+  const [showModal, setShowModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    course_section_id: '',
+    date: new Date().toISOString().split('T')[0],
+    start_time: '07:00',
+    end_time: '09:00',
+  });
+
+  const fetchSessions = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('attendance_sessions')
+      .select(`
+        id, status, scheduled_start, scheduled_end,
+        course_sections (
+          id, section_code,
+          courses (course_name),
+          classes (class_name)
+        )
+      `)
+      .order('scheduled_start', { ascending: false });
+    
+    if (data) setSessions(data);
+    setLoading(false);
+  };
+
+  const fetchSections = async () => {
+    const { data } = await supabase
+      .from('course_sections')
+      .select(`
+        id, section_code,
+        courses (course_name),
+        classes (class_name)
+      `);
+    if (data) {
+      setSections(data);
+      if (data.length > 0) {
+        setFormData(prev => ({ ...prev, course_section_id: data[0].id }));
+      }
+    }
+  };
 
   useEffect(() => {
-    async function fetchSessions() {
-      const { data } = await supabase
-        .from('attendance_sessions')
-        .select(`
-          id, status, scheduled_start, scheduled_end,
-          course_sections (
-            section_code,
-            courses (course_name),
-            classes (class_name)
-          )
-        `)
-        .order('scheduled_start', { ascending: false });
-      
-      if (data) setSessions(data);
-      setLoading(false);
-    }
     fetchSessions();
+    fetchSections();
   }, []);
+
+  const handleCreateSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    // Generate a random 6-digit token
+    const token = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    const startDateTime = new Date(`${formData.date}T${formData.start_time}:00`).toISOString();
+    const endDateTime = new Date(`${formData.date}T${formData.end_time}:00`).toISOString();
+    const scanDeadline = endDateTime;
+    // Allow late after 30 minutes
+    const lateAfter = new Date(new Date(`${formData.date}T${formData.start_time}:00`).getTime() + 30 * 60000).toISOString();
+
+    const { error } = await supabase.from('attendance_sessions').insert({
+      course_section_id: formData.course_section_id,
+      scheduled_start: startDateTime,
+      scheduled_end: endDateTime,
+      scan_deadline: scanDeadline,
+      late_after: lateAfter,
+      status: 'OPEN',
+      session_token: token
+    });
+
+    if (!error) {
+      setShowModal(false);
+      fetchSessions();
+    } else {
+      alert('Lỗi tạo phiên: ' + error.message);
+    }
+    setIsSubmitting(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -36,8 +98,11 @@ export default function SessionsListPage() {
           <h2 className="text-2xl font-bold tracking-tight">Phiên điểm danh</h2>
           <p className="text-muted-foreground mt-1">Danh sách các phiên học thực tế từ cơ sở dữ liệu.</p>
         </div>
-        <button className="px-4 py-2 bg-primary text-primary-foreground rounded-sm font-medium">
-          + Tạo phiên mới
+        <button 
+          onClick={() => setShowModal(true)}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-sm font-medium flex items-center gap-2"
+        >
+          <Plus className="h-4 w-4" /> Tạo phiên mới
         </button>
       </div>
 
@@ -86,6 +151,87 @@ export default function SessionsListPage() {
               </div>
             </Link>
           ))}
+        </div>
+      )}
+
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-md shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h3 className="font-bold text-lg">Tạo Phiên Điểm Danh Mới</h3>
+              <button onClick={() => setShowModal(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateSession} className="p-4 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Lớp học phần</label>
+                <select 
+                  className="w-full border border-input rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  value={formData.course_section_id}
+                  onChange={(e) => setFormData({...formData, course_section_id: e.target.value})}
+                  required
+                >
+                  {sections.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.courses?.course_name} ({s.classes?.class_name}) - {s.section_code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Ngày học</label>
+                <input 
+                  type="date" 
+                  className="w-full border border-input rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  value={formData.date}
+                  onChange={(e) => setFormData({...formData, date: e.target.value})}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Giờ bắt đầu</label>
+                  <input 
+                    type="time" 
+                    className="w-full border border-input rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={formData.start_time}
+                    onChange={(e) => setFormData({...formData, start_time: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Giờ kết thúc</label>
+                  <input 
+                    type="time" 
+                    className="w-full border border-input rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={formData.end_time}
+                    onChange={(e) => setFormData({...formData, end_time: e.target.value})}
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="pt-4 flex gap-2 justify-end">
+                <button 
+                  type="button" 
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 border border-input text-foreground rounded-sm font-medium hover:bg-muted"
+                >
+                  Hủy
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-sm font-medium flex items-center gap-2 hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Tạo Phiên'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
