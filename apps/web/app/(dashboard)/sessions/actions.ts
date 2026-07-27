@@ -83,7 +83,10 @@ export async function createSessionAdmin(payload: {
   return { success: true, data };
 }
 
+import { unstable_noStore as noStore } from 'next/cache';
+
 export async function fetchLiveSessionAdmin(sessionId: string) {
+  noStore();
   const { data: session } = await supabaseAdmin
     .from('attendance_sessions')
     .select(`
