@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
     private var techListsArray: Array<Array<String>>? = null
 
     // Compose State
-    private var baseUrlState = mutableStateOf("https://tapattend.vercel.app")
+    private var baseUrlState = mutableStateOf("https://diem-danh-dhv.vercel.app")
     private var sessionIdState = mutableStateOf("")
     private var isScanningState = mutableStateOf(false)
     private var scanResultState = mutableStateOf("")
@@ -54,13 +54,8 @@ class MainActivity : ComponentActivity() {
             this, 0, intent,
             PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val ndef = IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED)
-        try {
-            ndef.addDataType("*/*")
-        } catch (e: IntentFilter.MalformedMimeTypeException) {
-            throw RuntimeException("fail", e)
-        }
-        intentFiltersArray = arrayOf(ndef)
+        // Pass null for intent filters to catch all tags that match techListsArray
+        intentFiltersArray = null
         techListsArray = arrayOf(
             arrayOf("android.nfc.tech.MifareClassic"),
             arrayOf("android.nfc.tech.IsoDep"),
