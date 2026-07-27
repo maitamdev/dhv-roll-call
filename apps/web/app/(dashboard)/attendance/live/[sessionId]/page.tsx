@@ -103,12 +103,16 @@ export default function LiveAttendancePage() {
 
   useEffect(() => {
     fetchSessionAndRecords();
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionInfo?.id) return;
 
     const channel = supabase
-      .channel(`live_attendance_${sessionId}`)
+      .channel(`live_attendance_${sessionInfo.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'attendance_records', filter: `session_id=eq.${sessionId}` },
+        { event: '*', schema: 'public', table: 'attendance_records', filter: `session_id=eq.${sessionInfo.id}` },
         (payload) => {
           console.log('Realtime change:', payload);
           playBeep('success');
@@ -120,7 +124,7 @@ export default function LiveAttendancePage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [sessionId]);
+  }, [sessionInfo?.id]);
 
   const handleSimulateScan = async () => {
     setIsSimulating(true);
