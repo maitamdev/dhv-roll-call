@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
   BookOpenCheck,
+  Building2,
   CalendarDays,
   ChevronRight,
   Nfc,
@@ -31,6 +32,7 @@ const links: { name: string; href: string; icon: typeof LayoutDashboard; roles?:
   { name: 'Phiên điểm danh', href: '/sessions', icon: Nfc },
   { name: 'Sinh viên', href: '/students', icon: Users, roles: ['ADMIN', 'TRAINING_OFFICE'] },
   { name: 'Thẻ NFC', href: '/cards', icon: GraduationCap, roles: ['ADMIN', 'TRAINING_OFFICE'] },
+  { name: 'Phòng học', href: '/rooms', icon: Building2, roles: ['ADMIN', 'TRAINING_OFFICE'] },
   { name: 'Thiết bị', href: '/devices', icon: Laptop, roles: ['ADMIN', 'TRAINING_OFFICE'] },
   { name: 'Khuôn mặt', href: '/biometrics', icon: ScanFace, roles: ['ADMIN', 'TRAINING_OFFICE'] },
   { name: 'Chống gian lận', href: '/security', icon: ShieldCheck, roles: ['ADMIN', 'TRAINING_OFFICE'] },

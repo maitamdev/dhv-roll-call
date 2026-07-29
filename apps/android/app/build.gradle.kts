@@ -5,7 +5,7 @@ plugins {
 }
 
 val apiBaseUrl = providers.gradleProperty("API_BASE_URL")
-    .orElse("http://10.0.2.2:3000")
+    .orElse("https://dhv-tap-attend.vercel.app")
 
 android {
     namespace = "vn.edu.dhv.tapattend"

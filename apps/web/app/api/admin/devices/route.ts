@@ -33,6 +33,15 @@ export async function POST(request: NextRequest) {
   }
 
   const pairingCode = generatePairingCode();
+  let pairingHash: string;
+  try {
+    pairingHash = pairingCodeHash(pairingCode);
+  } catch {
+    return NextResponse.json(
+      { success: false, message: 'Máy chủ chưa cấu hình khóa bảo mật ghép máy quét. Hãy bổ sung DEVICE_PAIRING_SECRET.' },
+      { status: 503 },
+    );
+  }
   const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
   const placeholderUuid = crypto.randomUUID();
   const { data, error } = await supabaseAdmin
@@ -42,7 +51,7 @@ export async function POST(request: NextRequest) {
       device_name: name,
       room_id: roomId,
       status: 'PENDING',
-      pairing_code_hash: pairingCodeHash(pairingCode),
+      pairing_code_hash: pairingHash,
       pairing_expires_at: expiresAt,
     })
     .select('id')

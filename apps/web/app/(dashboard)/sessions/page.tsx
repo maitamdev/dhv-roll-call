@@ -192,7 +192,12 @@ export default function SessionsListPage() {
             <form onSubmit={handleCreateSession} className="space-y-5 p-5 sm:p-6">
               {formError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">{formError}</div>}
               {sections.length === 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Bạn chưa được phân công học phần nào. Hãy liên hệ Admin/Phòng đào tạo.</div>}
-              {rooms.length === 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Chưa có phòng học. Admin cần tạo phòng và ghép máy quét trước.</div>}
+              {rooms.length === 0 && (
+                <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center">
+                  <span>Chưa có phòng học. Admin cần tạo phòng trước khi tạo buổi học.</span>
+                  <Link href="/rooms" className="shrink-0 font-extrabold text-primary underline underline-offset-4">Tạo phòng ngay</Link>
+                </div>
+              )}
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label><span className="field-label">Học phần</span><select required className="field" value={formData.course_section_id} onChange={(event) => setFormData({ ...formData, course_section_id: event.target.value })}><option value="">Chọn học phần</option>{sections.map((section) => <option key={section.id} value={section.id}>{section.courses?.course_code} · {section.courses?.course_name} · {section.section_code}</option>)}</select></label>

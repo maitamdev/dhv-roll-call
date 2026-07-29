@@ -410,7 +410,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun SetupScreen() {
         val pairingCode by pairingCodeState
-        val baseUrl = BuildConfig.API_BASE_URL
+        var baseUrl by remember { mutableStateOf(BuildConfig.API_BASE_URL) }
         val sessionId = "AUTO"
         val isPaired = false
         val scope = rememberCoroutineScope()
@@ -490,7 +490,7 @@ class MainActivity : ComponentActivity() {
                     if (false) {
                     OutlinedTextField(
                         value = baseUrl,
-                        onValueChange = {},
+                        onValueChange = { baseUrl = it },
                         label = { Text("Địa chỉ máy chủ") },
                         supportingText = { Text("Ví dụ: https://dhv-tap-attend.vercel.app") },
                         modifier = Modifier.fillMaxWidth(),

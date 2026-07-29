@@ -25,10 +25,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'Khóa công khai của thiết bị không hợp lệ.' }, { status: 400 });
   }
 
+  let pairingHash: string;
+  try {
+    pairingHash = pairingCodeHash(pairingCode);
+  } catch {
+    return NextResponse.json({ success: false, message: 'Máy chủ chưa cấu hình khóa bảo mật ghép máy quét.' }, { status: 503 });
+  }
+
   const { data: slot } = await supabaseAdmin
     .from('devices')
     .select('id, status, pairing_expires_at, room_id, rooms(room_code)')
-    .eq('pairing_code_hash', pairingCodeHash(pairingCode))
+    .eq('pairing_code_hash', pairingHash)
     .maybeSingle();
 
   if (!slot || slot.status !== 'PENDING' || !slot.pairing_expires_at || Date.parse(slot.pairing_expires_at) < Date.now()) {

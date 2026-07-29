@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Building2, Copy, Laptop, Plus, RefreshCw, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
+import { Copy, DoorOpen, Laptop, Plus, RefreshCw, ShieldCheck } from 'lucide-react';
 
 type Room = { id: string; room_code: string; building: string; capacity: number };
 type Device = {
@@ -23,7 +24,6 @@ export default function DevicesPage() {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
   const [roomId, setRoomId] = useState('');
-  const [roomForm, setRoomForm] = useState({ roomCode: '', building: '', capacity: 40 });
   const [pairing, setPairing] = useState<{ code: string; expiresAt: string; roomCode: string } | null>(null);
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
 
@@ -48,27 +48,6 @@ export default function DevicesPage() {
 
   useEffect(() => { void fetchWorkspace(); }, [fetchWorkspace]);
 
-  async function createRoom(event: React.FormEvent) {
-    event.preventDefault();
-    setSaving(true);
-    setMessage(null);
-    const response = await fetch('/api/admin/rooms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(roomForm),
-    });
-    const body = await response.json().catch(() => null);
-    if (!response.ok) {
-      setMessage({ tone: 'error', text: body?.message || 'Không thể tạo phòng.' });
-    } else {
-      setMessage({ tone: 'success', text: `Đã tạo phòng ${body.room.room_code}.` });
-      setRoomForm({ roomCode: '', building: '', capacity: 40 });
-      setRoomId(body.room.id);
-      await fetchWorkspace();
-    }
-    setSaving(false);
-  }
-
   async function createPairing() {
     if (!name.trim() || !roomId) {
       setMessage({ tone: 'error', text: 'Hãy nhập tên máy quét và chọn phòng cố định.' });
@@ -76,20 +55,24 @@ export default function DevicesPage() {
     }
     setSaving(true);
     setMessage(null);
-    const response = await fetch('/api/admin/devices', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, roomId }),
-    });
-    const body = await response.json().catch(() => null);
-    if (!response.ok) {
-      setMessage({ tone: 'error', text: body?.message || 'Không thể tạo mã ghép nối.' });
-    } else {
-      const room = rooms.find((item) => item.id === roomId);
-      setPairing({ code: body.pairingCode, expiresAt: body.expiresAt, roomCode: room?.room_code || '' });
-      setName('');
-      setMessage({ tone: 'success', text: 'Mã ghép nối đã sẵn sàng trong 10 phút.' });
-      await fetchWorkspace();
+    try {
+      const response = await fetch('/api/admin/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, roomId }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        setMessage({ tone: 'error', text: body?.message || `Không thể tạo mã ghép nối (HTTP ${response.status}).` });
+      } else {
+        const room = rooms.find((item) => item.id === roomId);
+        setPairing({ code: body.pairingCode, expiresAt: body.expiresAt, roomCode: room?.room_code || '' });
+        setName('');
+        setMessage({ tone: 'success', text: 'Mã ghép nối đã sẵn sàng trong 10 phút.' });
+        await fetchWorkspace();
+      }
+    } catch {
+      setMessage({ tone: 'error', text: 'Không kết nối được máy chủ. Hãy kiểm tra web server đang chạy.' });
     }
     setSaving(false);
   }
@@ -114,7 +97,10 @@ export default function DevicesPage() {
           <h1 className="page-title flex items-center gap-2"><Laptop className="h-6 w-6 text-secondary" /> Máy quét cố định</h1>
           <p className="mt-1 text-sm text-slate-500">Mỗi máy chỉ ghép một lần và được khóa với đúng phòng học.</p>
         </div>
-        <button onClick={() => void fetchWorkspace()} className="icon-button" aria-label="Làm mới"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => void fetchWorkspace()} className="icon-button" aria-label="Làm mới"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
+          <Link href="/rooms" className="btn-secondary"><DoorOpen className="h-4 w-4" /> Quản lý phòng</Link>
+        </div>
       </div>
 
       {message && (
@@ -123,19 +109,17 @@ export default function DevicesPage() {
         </div>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
-        <form onSubmit={createRoom} className="panel p-5">
-          <div className="flex items-center gap-2 text-sm font-extrabold text-primary"><Building2 className="h-4 w-4 text-secondary" /> Tạo phòng học</div>
-          <p className="mt-2 text-xs leading-5 text-slate-500">Tạo phòng trước, sau đó gắn máy quét cố định vào phòng.</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label><span className="field-label">Mã phòng</span><input required className="field font-mono uppercase" value={roomForm.roomCode} onChange={(event) => setRoomForm({ ...roomForm, roomCode: event.target.value })} placeholder="A201" /></label>
-            <label><span className="field-label">Tòa nhà</span><input required className="field" value={roomForm.building} onChange={(event) => setRoomForm({ ...roomForm, building: event.target.value })} placeholder="Nhà A" /></label>
-            <label><span className="field-label">Sức chứa</span><input required min={1} max={500} type="number" className="field" value={roomForm.capacity} onChange={(event) => setRoomForm({ ...roomForm, capacity: Number(event.target.value) })} /></label>
-            <button disabled={saving} className="btn-secondary self-end disabled:opacity-50"><Plus className="h-4 w-4" /> Tạo phòng</button>
+      {rooms.length === 0 && !loading && (
+        <section className="panel flex flex-col items-start justify-between gap-4 border-amber-200 bg-amber-50/70 p-5 sm:flex-row sm:items-center">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-100"><DoorOpen className="h-5 w-5 text-amber-700" /></div>
+            <div><h2 className="text-sm font-extrabold text-amber-950">Cần tạo phòng trước khi ghép máy quét</h2><p className="mt-1 text-xs leading-5 text-amber-800">Mỗi máy quét phải được khóa với một phòng học cố định.</p></div>
           </div>
-        </form>
+          <Link href="/rooms" className="btn-primary shrink-0"><Plus className="h-4 w-4" /> Tạo phòng ngay</Link>
+        </section>
+      )}
 
-        <section className="panel grid gap-5 p-5 lg:grid-cols-[1fr_.8fr]">
+      <section className="panel grid gap-5 p-5 lg:grid-cols-[1fr_.8fr]">
           <div>
             <div className="flex items-center gap-2 text-sm font-extrabold text-primary"><ShieldCheck className="h-4 w-4 text-secondary" /> Ghép máy quét một lần</div>
             <p className="mt-2 text-xs leading-5 text-slate-500">Mã hết hạn sau 10 phút. Thiết bị tạo khóa riêng trong Android Keystore.</p>
@@ -157,8 +141,7 @@ export default function DevicesPage() {
               </>
             ) : <div className="flex min-h-24 items-center gap-3 text-sm text-slate-500"><ShieldCheck className="h-7 w-7 text-emerald-600" /> Chưa cấp mã ghép nối.</div>}
           </div>
-        </section>
-      </div>
+      </section>
 
       <div className="data-shell overflow-x-auto">
         <table className="data-table text-xs">
