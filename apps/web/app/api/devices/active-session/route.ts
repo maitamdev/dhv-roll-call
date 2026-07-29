@@ -31,8 +31,6 @@ export async function POST(request: NextRequest) {
     `)
     .eq('room_id', trust.device.roomId)
     .eq('status', 'OPEN')
-    .lte('scheduled_start', startCeiling.toISOString())
-    .gte('scan_deadline', now.toISOString())
     .order('scheduled_start')
     .limit(2);
   if (error) {
