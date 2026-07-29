@@ -1,8 +1,14 @@
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabase';
+import { requirePageRole } from '@/lib/auth';
+
+async function requireStudentStaff() {
+  return requirePageRole(['ADMIN', 'TRAINING_OFFICE']);
+}
 
 export async function fetchStudentsPageAdmin() {
+  await requireStudentStaff();
   const { data, error } = await supabaseAdmin
     .from('students')
     .select(`
@@ -20,6 +26,7 @@ export async function fetchStudentsPageAdmin() {
 }
 
 export async function fetchClassesAdmin() {
+  await requireStudentStaff();
   const { data, error } = await supabaseAdmin
     .from('classes')
     .select('id, class_name, class_code');
@@ -35,6 +42,7 @@ export async function addStudentAdmin(payload: {
   phone: string;
   class_id: string;
 }) {
+  await requireStudentStaff();
   if (!payload.student_code || !payload.full_name || !payload.class_id) {
     return { success: false, error: 'Vui lòng nhập đầy đủ MSSV, Tên và Lớp.' };
   }
@@ -67,9 +75,12 @@ export async function addStudentAdmin(payload: {
     return { success: false, error: error.message };
   }
 
-  // Also auto-enroll them in any active course sections for their class
-  // Since we only have 1 dummy class/section, let's just enroll them in all sections for now to be safe
-  const { data: sections } = await supabaseAdmin.from('course_sections').select('id');
+  // Auto-enroll only in course sections assigned to the selected class.
+  const { data: sections } = await supabaseAdmin
+    .from('course_sections')
+    .select('id')
+    .eq('class_id', payload.class_id)
+    .eq('status', 'OPEN');
   if (sections && sections.length > 0) {
     for (const sec of sections) {
       await supabaseAdmin.from('enrollments').upsert({

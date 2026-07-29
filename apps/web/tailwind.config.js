@@ -10,8 +10,9 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        outfit: ['var(--font-outfit)', 'sans-serif'],
-        jakarta: ['var(--font-jakarta)', 'sans-serif'],
+        outfit: ['var(--font-manrope)', 'sans-serif'],
+        jakarta: ['var(--font-manrope)', 'sans-serif'],
+        mono: ['var(--font-plex-mono)', 'monospace'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -50,8 +51,11 @@ module.exports = {
       },
       borderRadius: {
         lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        md: "calc(var(--radius) - 4px)",
+        sm: "calc(var(--radius) - 6px)",
+      },
+      boxShadow: {
+        panel: "0 1px 2px rgba(16, 35, 63, 0.04), 0 10px 28px rgba(16, 35, 63, 0.06)",
       },
     },
   },

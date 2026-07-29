@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { 
   CheckCircle2, Clock, XCircle, Users, Search, 
-  Smartphone, Volume2, X, Play, Square, RefreshCw, Hash
+  Volume2, X, Play, Square, RefreshCw, Hash, Repeat2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -32,13 +32,8 @@ export default function LiveAttendancePage() {
   const [records, setRecords] = useState<StudentRecord[]>([]);
   const [filter, setFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [realtimeStatus, setRealtimeStatus] = useState<'CONNECTING' | 'LIVE' | 'FALLBACK'>('CONNECTING');
   
-  // Simulator state
-  const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
-  const [studentsList, setStudentsList] = useState<any[]>([]);
-  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
-  const [simCardUid, setSimCardUid] = useState('8074A1B2');
-  const [isSimulating, setIsSimulating] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
 
   // Manual Override state
@@ -60,8 +55,8 @@ export default function LiveAttendancePage() {
     } catch (e) {}
   };
 
-  const fetchSessionAndRecords = async () => {
-    setLoading(true);
+  const fetchSessionAndRecords = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const data = await fetchLiveSessionAdmin(sessionId);
       
@@ -78,7 +73,7 @@ export default function LiveAttendancePage() {
             id: student?.id || r.student_id,
             studentCode: student?.student_code || '',
             fullName: student?.full_name || '',
-            className: cls?.class_name || 'CT07PM',
+            className: cls?.class_name || 'Chưa xếp lớp',
             avatarUrl: student?.avatar_url,
             status: r.status,
             firstScanAt: r.first_scan_at ? new Date(r.first_scan_at).toLocaleTimeString('vi-VN') : undefined,
@@ -88,16 +83,10 @@ export default function LiveAttendancePage() {
         setRecords(formatted);
       }
 
-      if (data.students && data.students.length > 0) {
-        setStudentsList(data.students);
-        if (!selectedStudentId) {
-          setSelectedStudentId(data.students[0].id);
-        }
-      }
     } catch (err) {
       console.error('Error fetching live session:', err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -119,50 +108,37 @@ export default function LiveAttendancePage() {
           const newRec = payload.new as any;
           if (!newRec.session_id || newRec.session_id === sessionInfo.id) {
             playBeep('success');
-            fetchSessionAndRecords();
+            fetchSessionAndRecords(false);
           }
         }
       )
-      .subscribe();
+      .on(
+        'broadcast',
+        { event: 'scan_update' },
+        (payload) => {
+          console.log('Realtime broadcast:', payload);
+          playBeep('success');
+          fetchSessionAndRecords(false);
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') setRealtimeStatus('LIVE');
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          setRealtimeStatus('FALLBACK');
+        }
+      });
+
+    // Reconcile occasionally even when Realtime is healthy. Hidden tabs do not
+    // poll, and background refreshes never replace the page with a skeleton.
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchSessionAndRecords(false);
+    }, 20_000);
 
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, [sessionInfo?.id]);
-
-  const handleSimulateScan = async () => {
-    setIsSimulating(true);
-    try {
-      const res = await fetch('/api/nfc/scans', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          cardUid: simCardUid,
-          requestId: `WEB_SIM_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          clientScannedAt: new Date().toISOString(),
-          source: 'WEB_SIMULATOR'
-        })
-      });
-
-      const data = await res.json();
-
-      if (data.success && data.student) {
-        playBeep('success');
-        setToastMessage({ type: 'success', text: `Điểm danh thành công - ${data.student.fullName}` });
-        fetchSessionAndRecords();
-      } else {
-        playBeep('error');
-        setToastMessage({ type: 'error', text: `${data.message}` });
-      }
-    } catch (err: any) {
-      playBeep('error');
-      setToastMessage({ type: 'error', text: 'Lỗi kết nối API giả lập' });
-    } finally {
-      setIsSimulating(false);
-      setTimeout(() => setToastMessage(null), 4000);
-    }
-  };
 
   const toggleSession = async () => {
     const targetAction = sessionStatus === 'OPEN' ? 'close' : 'open';
@@ -172,7 +148,7 @@ export default function LiveAttendancePage() {
       if (data.success) {
         setSessionStatus(targetAction === 'open' ? 'OPEN' : 'CLOSED');
         setToastMessage({ type: 'info', text: data.message });
-        fetchSessionAndRecords();
+        fetchSessionAndRecords(false);
         setTimeout(() => setToastMessage(null), 3000);
       }
     } catch (e) {
@@ -180,23 +156,31 @@ export default function LiveAttendancePage() {
     }
   };
 
+  const startRandomRescan = async () => {
+    const response = await fetch(`/api/attendance-sessions/${sessionId}/rescan`, { method: 'POST' });
+    const data = await response.json().catch(() => null);
+    setToastMessage({
+      type: response.ok ? 'success' : 'error',
+      text: data?.message || 'Không thể bắt đầu tái xác minh',
+    });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
   const handleSaveOverride = async () => {
     if (!overrideRecord) return;
     try {
-      await supabase
-        .from('attendance_records')
-        .update({
-          status: newStatus,
-          first_scan_at: new Date().toISOString(),
-          source: 'MANUAL_OVERRIDE',
-          manual_override: true,
-          override_reason: overrideReason
-        })
-        .eq('session_id', sessionId)
-        .eq('student_id', overrideRecord.id);
-
-      setToastMessage({ type: 'success', text: `Đã cập nhật trạng thái cho ${overrideRecord.fullName}` });
-      fetchSessionAndRecords();
+      const response = await fetch(`/api/attendance-sessions/${sessionId}/override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId: overrideRecord.id, status: newStatus, reason: overrideReason }),
+      });
+      const body = await response.json().catch(() => null);
+      setToastMessage({
+        type: response.ok ? 'success' : 'error',
+        text: response.ok ? `Đã cập nhật trạng thái cho ${overrideRecord.fullName}` : body?.message || 'Không thể cập nhật',
+      });
+      if (!response.ok) return;
+    fetchSessionAndRecords(false);
       setTimeout(() => setToastMessage(null), 3000);
     } catch (err) {
       console.error('Error override:', err);
@@ -238,7 +222,7 @@ export default function LiveAttendancePage() {
       )}
 
       {/* Header Info */}
-      <div className="bg-white border border-border rounded-sm p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+      <div className="page-header">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
@@ -252,31 +236,27 @@ export default function LiveAttendancePage() {
               <Hash className="w-4 h-4" />
               {sessionInfo?.session_token || '------'}
             </span>
+            <span className={`status-chip ${realtimeStatus === 'LIVE' ? 'status-success' : realtimeStatus === 'FALLBACK' ? 'status-warning' : ''}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${realtimeStatus === 'LIVE' ? 'bg-emerald-500' : realtimeStatus === 'FALLBACK' ? 'bg-amber-500' : 'bg-slate-400'}`} />
+              {realtimeStatus === 'LIVE' ? 'Realtime' : realtimeStatus === 'FALLBACK' ? 'Đồng bộ dự phòng' : 'Đang kết nối'}
+            </span>
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            {courseData?.course_name || 'Lập trình Web nâng cao'} · Lớp {classData?.class_name || 'CT07PM'}
+          <h1 className="page-title">
+            {courseData?.course_name || 'Chưa có tên học phần'} · Lớp {classData?.class_name || 'Chưa xếp lớp'}
           </h1>
           <p className="text-sm text-muted-foreground font-medium mt-1">
-            Phòng {roomData?.room_code || 'A301'} · Giảng viên: {sectionData?.lecturers?.full_name || 'TS. Nguyễn Văn An'}
+            Phòng {roomData?.room_code || 'Chưa gán'} · Giảng viên: {sectionData?.lecturers?.full_name || 'Chưa gán'}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button 
-            onClick={fetchSessionAndRecords} 
-            className="p-2.5 bg-white hover:bg-muted border border-input rounded-sm text-foreground transition-colors" 
+            onClick={() => fetchSessionAndRecords()}
+            className="icon-button"
             title="Tải lại dữ liệu"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-primary' : ''}`} />
-          </button>
-
-          <button
-            onClick={() => setIsSimulatorOpen(true)}
-            className="px-4 py-2.5 bg-secondary text-white hover:bg-secondary/90 rounded-sm text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
-          >
-            <Smartphone className="w-4 h-4" />
-            Giả lập quẹt thẻ
           </button>
 
           <button
@@ -299,12 +279,18 @@ export default function LiveAttendancePage() {
               </>
             )}
           </button>
+          {sessionStatus === 'OPEN' && (
+            <button onClick={startRandomRescan} className="btn-secondary">
+              <Repeat2 className="h-4 w-4" />
+              Tái xác minh ngẫu nhiên
+            </button>
+          )}
         </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 bg-white border border-border rounded-sm shadow-sm flex items-center gap-4">
+        <div className="panel flex items-center gap-4 p-5">
           <div className="h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <CheckCircle2 className="w-6 h-6" />
           </div>
@@ -313,7 +299,7 @@ export default function LiveAttendancePage() {
             <div className="text-xs font-medium text-muted-foreground">CÓ MẶT</div>
           </div>
         </div>
-        <div className="p-5 bg-white border border-border rounded-sm shadow-sm flex items-center gap-4">
+        <div className="panel flex items-center gap-4 p-5">
           <div className="h-12 w-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
             <Clock className="w-6 h-6" />
           </div>
@@ -322,7 +308,7 @@ export default function LiveAttendancePage() {
             <div className="text-xs font-medium text-muted-foreground">ĐI MUỘN</div>
           </div>
         </div>
-        <div className="p-5 bg-white border border-border rounded-sm shadow-sm flex items-center gap-4">
+        <div className="panel flex items-center gap-4 p-5">
           <div className="h-12 w-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
             <XCircle className="w-6 h-6" />
           </div>
@@ -331,7 +317,7 @@ export default function LiveAttendancePage() {
             <div className="text-xs font-medium text-muted-foreground">VẮNG MẶT</div>
           </div>
         </div>
-        <div className="p-5 bg-white border border-border rounded-sm shadow-sm flex items-center gap-4">
+        <div className="panel flex items-center gap-4 p-5">
           <div className="h-12 w-12 rounded-full bg-slate-50 text-slate-600 flex items-center justify-center">
             <Users className="w-6 h-6" />
           </div>
@@ -343,7 +329,7 @@ export default function LiveAttendancePage() {
       </div>
 
       {/* Main Table Area */}
-      <div className="bg-white border border-border rounded-sm shadow-sm">
+      <div className="data-shell">
         <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           
           <div className="flex items-center gap-2 overflow-x-auto">
@@ -375,14 +361,14 @@ export default function LiveAttendancePage() {
               placeholder="Tìm tên hoặc MSSV..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full sm:w-64 pl-9 pr-3 py-2 bg-white border border-input rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="field w-full pl-9 sm:w-64"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-muted/30 text-muted-foreground">
+          <table className="data-table">
+            <thead>
               <tr>
                 <th className="py-3 px-6 font-medium">Sinh viên</th>
                 <th className="py-3 px-6 font-medium">Mã sinh viên</th>
@@ -406,7 +392,7 @@ export default function LiveAttendancePage() {
                     {r.source === 'ANDROID_NFC' ? (
                       <span className="text-xs text-primary font-medium">App Android</span>
                     ) : r.source === 'WEB_SIMULATOR' ? (
-                      <span className="text-xs text-purple-600 font-medium">Web Giả lập</span>
+                            <span className="text-xs text-secondary font-medium">Web Giả lập</span>
                     ) : r.source === 'MANUAL_OVERRIDE' ? (
                       <span className="text-xs text-amber-600 font-medium">Thủ công</span>
                     ) : (
@@ -452,76 +438,11 @@ export default function LiveAttendancePage() {
         </div>
       </div>
 
-      {/* Simulator Modal */}
-      {isSimulatorOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-md shadow-lg overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
-              <div className="flex items-center gap-2 text-foreground font-semibold">
-                <Smartphone className="w-5 h-5 text-secondary" />
-                <h3>Giả lập quẹt thẻ NFC</h3>
-              </div>
-              <button onClick={() => setIsSimulatorOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-foreground">Chọn sinh viên (Mẫu)</label>
-                <select
-                  value={selectedStudentId}
-                  onChange={(e) => {
-                    setSelectedStudentId(e.target.value);
-                  }}
-                  className="w-full p-2 border border-input rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {studentsList.map(st => (
-                    <option key={st.id} value={st.id}>
-                      {st.full_name} ({st.student_code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-foreground">Mã UID Thẻ (Hex)</label>
-                <input
-                  type="text"
-                  value={simCardUid}
-                  onChange={(e) => setSimCardUid(e.target.value)}
-                  className="w-full p-2 border border-input rounded-sm text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-muted/30"
-                />
-              </div>
-
-              <div className="p-3 bg-blue-50 border border-blue-100 rounded-sm text-xs text-blue-700 leading-relaxed">
-                Thao tác này sẽ gửi request lên API thực tế <code>/api/nfc/scans</code> và kích hoạt Supabase Realtime tự động cập nhật bảng bên ngoài.
-              </div>
-
-              <button
-                onClick={handleSimulateScan}
-                disabled={isSimulating}
-                className="w-full py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-sm transition-colors flex items-center justify-center gap-2"
-              >
-                {isSimulating ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Đang quét...
-                  </>
-                ) : (
-                  <>Chạm thẻ ngay</>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Override Modal */}
       {overrideRecord && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-md shadow-lg overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
+        <div className="modal-backdrop">
+          <div className="modal-panel max-w-md">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
               <h3 className="font-semibold text-foreground">Sửa trạng thái thủ công</h3>
               <button onClick={() => setOverrideRecord(null)} className="text-muted-foreground hover:text-foreground">
                 <X className="w-5 h-5" />
@@ -539,7 +460,7 @@ export default function LiveAttendancePage() {
                 <select
                   value={newStatus}
                   onChange={(e) => setNewStatus(e.target.value as any)}
-                  className="w-full p-2 border border-input rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="field"
                 >
                   <option value="PRESENT">Có mặt</option>
                   <option value="LATE">Đi muộn</option>
@@ -554,20 +475,20 @@ export default function LiveAttendancePage() {
                   value={overrideReason}
                   onChange={(e) => setOverrideReason(e.target.value)}
                   placeholder="Ghi rõ lý do (ví dụ: Quên mang thẻ)..."
-                  className="w-full p-2 border border-input rounded-sm text-sm h-24 focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="field h-24 py-2"
                 />
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   onClick={() => setOverrideRecord(null)}
-                  className="px-4 py-2 text-sm font-medium bg-muted hover:bg-muted/80 text-foreground rounded-sm"
+                  className="btn-secondary"
                 >
                   Hủy
                 </button>
                 <button
                   onClick={handleSaveOverride}
-                  className="px-4 py-2 text-sm font-medium bg-primary hover:bg-primary/90 text-primary-foreground rounded-sm"
+                  className="btn-primary"
                 >
                   Lưu thay đổi
                 </button>

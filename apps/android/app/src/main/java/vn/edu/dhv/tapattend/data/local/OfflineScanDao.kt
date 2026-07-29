@@ -17,6 +17,9 @@ interface OfflineScanDao {
     @Query("UPDATE offline_scans SET syncStatus = 'SYNCED' WHERE requestId IN (:requestIds)")
     suspend fun markAsSynced(requestIds: List<String>)
 
+    @Query("UPDATE offline_scans SET syncStatus = 'FAILED' WHERE requestId IN (:requestIds)")
+    suspend fun markAsFailed(requestIds: List<String>)
+
     @Query("DELETE FROM offline_scans WHERE syncStatus = 'SYNCED'")
     suspend fun clearSyncedScans()
 }

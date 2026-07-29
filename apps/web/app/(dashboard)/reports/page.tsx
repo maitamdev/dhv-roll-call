@@ -1,128 +1,160 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { FileSpreadsheet, Download, AlertTriangle, RefreshCw } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Download, FileSpreadsheet, RefreshCw } from 'lucide-react';
+
+type ReportRow = {
+  id: string;
+  code: string;
+  name: string;
+  present: number;
+  late: number;
+  absent: number;
+  percentage: number;
+};
 
 export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
-  const [reportData, setReportData] = useState<any[]>([]);
+  const [error, setError] = useState('');
+  const [reportData, setReportData] = useState<ReportRow[]>([]);
+  const [sessionCount, setSessionCount] = useState(0);
 
-  const fetchReports = async () => {
+  const fetchReports = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const { data: students } = await supabase
-        .from('students')
-        .select(`
-          id, student_code, full_name,
-          attendance_records (status)
-        `);
-
-      if (students) {
-        const formatted = students.map((s: any) => {
-          const recs = s.attendance_records || [];
-          const present = recs.filter((r: any) => r.status === 'PRESENT').length;
-          const late = recs.filter((r: any) => r.status === 'LATE').length;
-          const absent = recs.filter((r: any) => r.status === 'ABSENT').length;
-          const total = recs.length || 1;
-          const percentage = Math.round(((present + late) / total) * 100);
-
-          return {
-            id: s.id,
-            code: s.student_code,
-            name: s.full_name,
-            present,
-            late,
-            absent,
-            percentage
-          };
-        });
-        setReportData(formatted);
-      }
-    } catch (err) {
-      console.error('Error fetching reports:', err);
+      const response = await fetch('/api/admin/reports/attendance', {
+        cache: 'no-store',
+        headers: { accept: 'application/json' },
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.message || 'Không thể tải báo cáo.');
+      setReportData(payload.rows);
+      setSessionCount(payload.sessionCount);
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : 'Không thể tải báo cáo.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchReports();
-  }, []);
+    void fetchReports();
+  }, [fetchReports]);
+
+  const averageRate = useMemo(
+    () => reportData.length
+      ? Math.round(reportData.reduce((sum, row) => sum + row.percentage, 0) / reportData.length)
+      : 0,
+    [reportData],
+  );
+  const atRisk = useMemo(() => reportData.filter((row) => row.percentage < 80), [reportData]);
+
+  function exportCsv() {
+    if (!reportData.length) return;
+    const escape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`;
+    const header = ['Mã sinh viên', 'Họ và tên', 'Có mặt', 'Đi muộn', 'Vắng', 'Tỷ lệ chuyên cần', 'Đánh giá'];
+    const rows = reportData.map((row) => [
+      row.code,
+      row.name,
+      row.present,
+      row.late,
+      row.absent,
+      `${row.percentage}%`,
+      row.percentage >= 80 ? 'Đủ điều kiện thi' : 'Cảnh báo',
+    ]);
+    const csv = `\uFEFF${[header, ...rows].map((row) => row.map(escape).join(',')).join('\r\n')}`;
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `bao-cao-chuyen-can-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="space-y-6 pb-12">
-      
-      <div className="bg-white border-2 border-slate-900 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+      <div className="page-header">
         <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-            <FileSpreadsheet className="w-6 h-6 text-emerald-700" />
-            Báo Cáo & Thống Kê Chuyên Cần
+          <p className="page-kicker">Phân tích chuyên cần</p>
+          <h1 className="page-title flex items-center gap-2">
+            <FileSpreadsheet className="h-6 w-6 text-secondary" />
+            Báo cáo chuyên cần
           </h1>
-          <p className="text-xs text-slate-600 font-medium mt-0.5">Dữ liệu tổng hợp chuyên cần thực tế từ Supabase PostgreSQL</p>
+          <p className="mt-1 text-xs font-medium text-slate-600">
+            Tổng hợp tại PostgreSQL để tải nhanh và không đưa lịch sử thô xuống trình duyệt.
+          </p>
         </div>
-
         <div className="flex items-center gap-2">
-          <button onClick={fetchReports} className="p-2.5 bg-slate-100 border border-slate-400 text-slate-800 hover:bg-slate-200">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <button onClick={() => void fetchReports()} className="icon-button" aria-label="Làm mới báo cáo">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <button className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-extrabold uppercase tracking-wider border border-emerald-900 flex items-center gap-2">
-            <Download className="w-4 h-4" />
-            <span>XUẤT FILE EXCEL (.XLSX)</span>
+          <button onClick={exportCsv} disabled={!reportData.length} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
+            <Download className="h-4 w-4" />
+            <span>XUẤT CSV</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-5 bg-white border border-slate-300">
-          <div className="text-xs font-bold text-slate-500 uppercase">Tổng số buổi đã học</div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-1">14 buổi</div>
-          <div className="text-[11px] text-slate-600 mt-1 font-medium">Môn: Lập trình Web nâng cao</div>
+      {error && (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <span>{error}</span>
+          <button onClick={() => void fetchReports()} className="font-bold hover:underline">Thử lại</button>
         </div>
+      )}
 
-        <div className="p-5 bg-white border border-slate-300">
-          <div className="text-xs font-bold text-slate-500 uppercase">Tỷ lệ chuyên cần trung bình</div>
-          <div className="text-2xl font-extrabold text-emerald-700 mt-1">93.7%</div>
-          <div className="text-[11px] text-emerald-800 font-bold mt-1">Đạt chỉ tiêu nhà trường</div>
-        </div>
-
-        <div className="p-5 bg-white border border-slate-300">
-          <div className="text-xs font-bold text-slate-500 uppercase">Nguy cơ cấm thi (&gt;20% vắng)</div>
-          <div className="text-2xl font-extrabold text-amber-700 mt-1">1 sinh viên</div>
-          <div className="text-[11px] text-amber-800 font-bold mt-1">Lê Minh Cường (Vắng 3 buổi)</div>
-        </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {[
+          ['Tổng số buổi đã học', `${sessionCount} buổi`, 'Tất cả phiên trong cơ sở dữ liệu', 'text-slate-900'],
+          ['Chuyên cần trung bình', `${averageRate}%`, 'Tính từ dữ liệu điểm danh hiện có', 'text-emerald-700'],
+          ['Sinh viên cần chú ý', `${atRisk.length} sinh viên`, 'Tỷ lệ chuyên cần dưới 80%', 'text-amber-700'],
+        ].map(([label, value, hint, tone]) => (
+          <div key={label} className="panel p-5">
+            <div className="text-xs font-bold uppercase text-slate-500">{label}</div>
+            <div className={`mt-1 text-2xl font-extrabold ${tone}`}>{loading ? '—' : value}</div>
+            <div className="mt-1 text-[11px] font-medium text-slate-600">{hint}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Report Summary Table */}
-      <div className="bg-white border-2 border-slate-900 overflow-hidden shadow-sm">
-        <table className="w-full text-left text-xs sharp-table">
-          <thead className="bg-slate-100 text-slate-700 border-b-2 border-slate-300 uppercase font-bold text-[11px] tracking-wider">
+      <div className="data-shell overflow-x-auto">
+        <table className="data-table text-xs">
+          <thead>
             <tr>
-              <th className="py-3.5 px-4">Mã sinh viên</th>
-              <th className="py-3.5 px-4">Họ và tên</th>
-              <th className="py-3.5 px-4 text-center">Có mặt</th>
-              <th className="py-3.5 px-4 text-center">Đi muộn</th>
-              <th className="py-3.5 px-4 text-center">Vắng</th>
-              <th className="py-3.5 px-4 text-center">Tỷ lệ chuyên cần</th>
-              <th className="py-3.5 px-4 text-right">Đánh giá dự thi</th>
+              <th className="px-4 py-3.5">Mã sinh viên</th>
+              <th className="px-4 py-3.5">Họ và tên</th>
+              <th className="px-4 py-3.5 text-center">Có mặt</th>
+              <th className="px-4 py-3.5 text-center">Đi muộn</th>
+              <th className="px-4 py-3.5 text-center">Vắng</th>
+              <th className="px-4 py-3.5 text-center">Chuyên cần</th>
+              <th className="px-4 py-3.5 text-right">Đánh giá</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {reportData.map((row) => (
+            {loading && Array.from({ length: 5 }).map((_, index) => (
+              <tr key={index} className="animate-pulse">
+                {Array.from({ length: 7 }).map((__, cell) => (
+                  <td key={cell} className="px-4 py-4"><div className="h-3 rounded bg-slate-100" /></td>
+                ))}
+              </tr>
+            ))}
+            {!loading && !error && reportData.length === 0 && (
+              <tr><td colSpan={7} className="py-12 text-center text-slate-500">Chưa có dữ liệu chuyên cần.</td></tr>
+            )}
+            {!loading && reportData.map((row) => (
               <tr key={row.id} className="hover:bg-slate-50">
-                <td className="py-3.5 px-4 font-mono font-bold text-slate-800">{row.code}</td>
-                <td className="py-3.5 px-4 font-bold text-slate-900">{row.name}</td>
-                <td className="py-3.5 px-4 text-center font-extrabold text-emerald-700">{row.present}</td>
-                <td className="py-3.5 px-4 text-center font-bold text-amber-700">{row.late}</td>
-                <td className="py-3.5 px-4 text-center font-bold text-red-700">{row.absent}</td>
-                <td className="py-3.5 px-4 text-center font-extrabold text-slate-900">{row.percentage}%</td>
-                <td className="py-3.5 px-4 text-right font-bold">
+                <td className="px-4 py-3.5 font-mono font-bold text-slate-800">{row.code}</td>
+                <td className="px-4 py-3.5 font-bold text-slate-900">{row.name}</td>
+                <td className="px-4 py-3.5 text-center font-extrabold text-emerald-700">{row.present}</td>
+                <td className="px-4 py-3.5 text-center font-bold text-amber-700">{row.late}</td>
+                <td className="px-4 py-3.5 text-center font-bold text-red-700">{row.absent}</td>
+                <td className="px-4 py-3.5 text-center font-extrabold text-slate-900">{row.percentage}%</td>
+                <td className="px-4 py-3.5 text-right font-bold">
                   {row.percentage >= 80 ? (
-                    <span className="text-emerald-700 uppercase">Đủ điều kiện thi</span>
+                    <span className="text-emerald-700">Đủ điều kiện thi</span>
                   ) : (
-                    <span className="text-amber-700 uppercase flex items-center justify-end gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Cảnh báo cấm thi
+                    <span className="inline-flex items-center gap-1 text-amber-700">
+                      <AlertTriangle className="h-3.5 w-3.5" /> Cần kiểm tra
                     </span>
                   )}
                 </td>
@@ -131,7 +163,6 @@ export default function ReportsPage() {
           </tbody>
         </table>
       </div>
-
     </div>
   );
 }

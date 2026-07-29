@@ -90,12 +90,24 @@ export interface NFCScanResponsePayload {
     | 'NOT_ENROLLED' 
     | 'SESSION_CLOSED' 
     | 'DEVICE_BLOCKED' 
-    | 'INVALID_CARD_STATUS';
+    | 'INVALID_CARD_STATUS'
+    | 'INVALID_REQUEST'
+    | 'WRONG_ROOM'
+    | 'FACE_NOT_ENROLLED'
+    | 'FACE_VERIFICATION_REQUIRED'
+    | 'SERVER_ERROR';
   message: string;
   student?: Student;
   attendance?: {
     status: AttendanceStatus;
     recordedAt: string;
+  };
+  verification?: {
+    challengeId?: string;
+    livenessAction?: 'BLINK' | 'TURN_LEFT' | 'TURN_RIGHT';
+    expiresAt?: string;
+    similarity?: number;
+    threshold?: number;
   };
 }
 

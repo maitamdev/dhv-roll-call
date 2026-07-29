@@ -37,7 +37,7 @@ export default function StudentsPage() {
         id: s.id,
         code: s.student_code,
         name: s.full_name,
-        class: cls?.class_name || cls?.class_code || 'CT07PM',
+        class: cls?.class_name || cls?.class_code || 'Chưa xếp lớp',
         email: s.email || '--',
         phone: s.phone || '--',
         cardUidMasked: card?.uid_masked || 'Chưa gán',
@@ -90,26 +90,27 @@ export default function StudentsPage() {
     <div className="space-y-6 pb-12">
       
       {/* Header */}
-      <div className="bg-white border-2 border-slate-900 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+      <div className="page-header">
         <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-            <Users className="w-6 h-6 text-red-600" />
-            Quản Lý Sinh Viên
+          <p className="page-kicker">Hồ sơ đào tạo</p>
+          <h1 className="page-title flex items-center gap-2">
+            <Users className="h-6 w-6 text-secondary" />
+            Quản lý sinh viên
           </h1>
-          <p className="text-xs text-slate-600 font-medium mt-0.5">Danh sách sinh viên toàn trường</p>
+          <p className="page-description">Tìm kiếm, cập nhật và theo dõi trạng thái thẻ của sinh viên toàn trường.</p>
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={loadData} className="p-2.5 bg-slate-100 border border-slate-400 text-slate-800 hover:bg-slate-200 transition-colors">
+          <button onClick={loadData} className="icon-button" aria-label="Làm mới">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <button className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold uppercase border border-slate-400 flex items-center gap-1.5 transition-colors hidden sm:flex">
+          <button className="btn-secondary hidden sm:flex">
             <Upload className="w-4 h-4 text-emerald-700" />
             <span>Nhập Excel</span>
           </button>
           <button 
             onClick={() => setShowModal(true)}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold uppercase border border-red-800 flex items-center gap-1.5 transition-colors shadow-sm"
+            className="btn-primary"
           >
             <Plus className="w-4 h-4" />
             <span>Thêm Sinh Viên</span>
@@ -118,12 +119,12 @@ export default function StudentsPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white border border-slate-300">
+      <div className="toolbar">
         <div className="flex items-center gap-2">
           <select
             value={selectedClass}
             onChange={(e) => setSelectedClass(e.target.value)}
-            className="px-3 py-1.5 bg-slate-50 border border-slate-400 text-slate-900 text-xs font-bold focus:outline-none"
+            className="field w-auto py-2 text-xs font-bold"
           >
             <option value="ALL">Tất cả lớp học</option>
             {classes.map(c => (
@@ -139,16 +140,16 @@ export default function StudentsPage() {
             placeholder="Tìm tên hoặc MSSV..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-400 text-slate-900 text-xs font-medium focus:outline-none focus:border-slate-900"
+            className="field pl-9 text-xs"
           />
         </div>
       </div>
 
       {/* Students Table */}
-      <div className="bg-white border-2 border-slate-900 overflow-hidden shadow-sm">
+      <div className="data-shell">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs sharp-table">
-            <thead className="bg-slate-100 text-slate-700 border-b-2 border-slate-300 uppercase font-bold text-[11px] tracking-wider">
+          <table className="data-table text-xs">
+            <thead>
               <tr>
                 <th className="py-3.5 px-4">Sinh viên</th>
                 <th className="py-3.5 px-4">Mã sinh viên</th>
@@ -207,12 +208,12 @@ export default function StudentsPage() {
 
       {/* Add Student Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white border-2 border-slate-900 shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b-2 border-slate-900 bg-slate-100">
-              <h3 className="font-extrabold text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                <Plus className="w-5 h-5 text-red-600" />
-                Thêm Sinh Viên Mới
+        <div className="modal-backdrop">
+          <div className="modal-panel max-w-md">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
+              <h3 className="flex items-center gap-2 font-bold text-slate-950">
+                <Plus className="h-5 w-5 text-secondary" />
+                Thêm sinh viên mới
               </h3>
               <button onClick={() => setShowModal(false)} className="text-slate-500 hover:text-slate-900 transition-colors">
                 <X className="w-5 h-5" />
@@ -235,7 +236,7 @@ export default function StudentsPage() {
                   placeholder="VD: Nguyễn Văn A"
                   value={formData.full_name}
                   onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                  className="w-full p-2 bg-white border border-slate-400 text-sm focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                  className="field"
                 />
               </div>
 
@@ -247,7 +248,7 @@ export default function StudentsPage() {
                   placeholder="VD: 2151120000"
                   value={formData.student_code}
                   onChange={(e) => setFormData({ ...formData, student_code: e.target.value })}
-                  className="w-full p-2 bg-white border border-slate-400 text-sm font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                  className="field font-mono"
                 />
               </div>
 
@@ -257,7 +258,7 @@ export default function StudentsPage() {
                   required
                   value={formData.class_id}
                   onChange={(e) => setFormData({ ...formData, class_id: e.target.value })}
-                  className="w-full p-2 bg-white border border-slate-400 text-sm focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                  className="field"
                 >
                   <option value="">-- Chọn lớp --</option>
                   {classes.map(c => (
@@ -273,7 +274,7 @@ export default function StudentsPage() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full p-2 bg-white border border-slate-400 text-sm focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                    className="field"
                   />
                 </div>
                 <div className="space-y-1">
@@ -282,7 +283,7 @@ export default function StudentsPage() {
                     type="text"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full p-2 bg-white border border-slate-400 text-sm focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                    className="field"
                   />
                 </div>
               </div>
@@ -291,14 +292,14 @@ export default function StudentsPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 text-xs font-bold uppercase bg-slate-100 hover:bg-slate-200 border border-slate-400 text-slate-800 transition-colors"
+                  className="btn-secondary"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 text-xs font-bold uppercase bg-red-600 hover:bg-red-700 border border-red-800 text-white transition-colors flex items-center gap-2"
+                  className="btn-primary"
                 >
                   {isSubmitting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />

@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { requireApiRole } from '@/lib/auth';
+import { getAccessibleCourseSectionIds } from '@/lib/authorization';
 
 export async function GET(req: NextRequest) {
+  const auth = await requireApiRole(['ADMIN', 'TRAINING_OFFICE', 'LECTURER']);
+  if (auth.response) return auth.response;
   try {
-    const { data: sessions, error } = await supabaseAdmin
+    const allowedSections = await getAccessibleCourseSectionIds(auth.profile!);
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    let query = supabaseAdmin
       .from('attendance_sessions')
       .select(`
         id, status, scheduled_start, scheduled_end, opened_at, closed_at, late_after, scan_deadline, session_token,
@@ -15,7 +24,13 @@ export async function GET(req: NextRequest) {
         ),
         rooms (room_code, building)
       `)
-      .order('scheduled_start', { ascending: true });
+      .gte('scheduled_start', start.toISOString())
+      .lt('scheduled_start', end.toISOString());
+    if (allowedSections !== null) {
+      if (allowedSections.length === 0) return NextResponse.json({ success: true, data: [] });
+      query = query.in('course_section_id', allowedSections);
+    }
+    const { data: sessions, error } = await query.order('scheduled_start', { ascending: true });
 
     if (error) {
       return NextResponse.json({ success: false, message: error.message }, { status: 500 });

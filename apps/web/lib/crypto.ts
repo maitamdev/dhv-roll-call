@@ -1,6 +1,15 @@
 import CryptoJS from 'crypto-js';
 
-const HMAC_SECRET = process.env.CARD_HMAC_SECRET || 'dhv_tap_attend_hmac_secret_2026_key';
+function getHmacSecret(): string {
+  const secret = process.env.CARD_HMAC_SECRET;
+  if (secret) return secret;
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('CARD_HMAC_SECRET must be configured in production.');
+  }
+
+  return 'dev-only-card-hmac-secret';
+}
 
 /**
  * Normalizes raw NFC UID string to uppercase hex without colons.
@@ -16,7 +25,7 @@ export function normalizeCardUid(rawUid: string): string {
  */
 export function hashCardUid(normalizedUid: string): string {
   const cleanUid = normalizeCardUid(normalizedUid);
-  return CryptoJS.HmacSHA256(cleanUid, HMAC_SECRET).toString(CryptoJS.enc.Hex);
+  return CryptoJS.HmacSHA256(cleanUid, getHmacSecret()).toString(CryptoJS.enc.Hex);
 }
 
 /**

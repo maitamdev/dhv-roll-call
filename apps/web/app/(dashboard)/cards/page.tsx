@@ -68,10 +68,11 @@ export default function CardsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white border border-border rounded-sm p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <CreditCard className="w-6 h-6 text-primary" />
+          <p className="page-kicker">Định danh không chạm</p>
+          <h1 className="page-title flex items-center gap-2">
+            <CreditCard className="h-6 w-6 text-secondary" />
             Quản lý Thẻ NFC
           </h1>
           <p className="text-sm text-muted-foreground font-medium mt-1">
@@ -81,7 +82,7 @@ export default function CardsPage() {
         
         <button
           onClick={() => setShowModal(true)}
-          className="px-4 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-sm text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
+          className="btn-primary"
         >
           <Plus className="w-4 h-4" />
           Đăng ký thẻ mới
@@ -89,7 +90,7 @@ export default function CardsPage() {
       </div>
 
       {/* Main Content */}
-      <div className="bg-white border border-border rounded-sm shadow-sm">
+      <div className="data-shell">
         <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/20">
           <div className="relative w-full sm:w-72">
             <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
@@ -98,7 +99,7 @@ export default function CardsPage() {
               placeholder="Tìm tên, mã SV hoặc mã Hash..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-white border border-input rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="field pl-9"
             />
           </div>
           <div className="text-sm text-muted-foreground">
@@ -107,8 +108,8 @@ export default function CardsPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-muted/30 text-muted-foreground">
+          <table className="data-table">
+            <thead>
               <tr>
                 <th className="py-3 px-6 font-medium">Mã sinh viên</th>
                 <th className="py-3 px-6 font-medium">Họ và tên</th>
@@ -169,9 +170,9 @@ export default function CardsPage() {
 
       {/* Registration Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-md shadow-lg overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
+        <div className="modal-backdrop">
+          <div className="modal-panel max-w-md">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
               <h3 className="font-semibold text-foreground flex items-center gap-2">
                 <Smartphone className="w-5 h-5 text-secondary" />
                 Đăng ký Thẻ NFC Mới
@@ -195,7 +196,7 @@ export default function CardsPage() {
                   required
                   value={formData.student_id}
                   onChange={(e) => setFormData({ ...formData, student_id: e.target.value })}
-                  className="w-full p-2 border border-input rounded-sm text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="field"
                 >
                   <option value="">-- Chọn sinh viên --</option>
                   {students.map(st => {
@@ -217,7 +218,7 @@ export default function CardsPage() {
                   placeholder="VD: 80:74:D7:0D"
                   value={formData.uid_hex}
                   onChange={(e) => setFormData({ ...formData, uid_hex: e.target.value })}
-                  className="w-full p-2 border border-input rounded-sm text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="field font-mono"
                 />
                 <p className="text-xs text-muted-foreground pt-1">
                   Mở ứng dụng NFC Tools trên điện thoại, quét thẻ và nhập mã Số sê-ri (UID) vào đây.
@@ -228,14 +229,14 @@ export default function CardsPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 text-sm font-medium bg-muted hover:bg-muted/80 text-foreground rounded-sm"
+                className="btn-secondary"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 text-sm font-medium bg-primary hover:bg-primary/90 text-primary-foreground rounded-sm flex items-center gap-2"
+                className="btn-primary"
                 >
                   {isSubmitting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />

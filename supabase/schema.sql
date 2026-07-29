@@ -45,7 +45,6 @@ CREATE TABLE IF NOT EXISTS public.users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
   username TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
   full_name TEXT NOT NULL,
   role user_role NOT NULL DEFAULT 'STUDENT',
   status TEXT DEFAULT 'ACTIVE',
@@ -282,3 +281,7 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 ALTER PUBLICATION supabase_realtime ADD TABLE public.attendance_records;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.attendance_sessions;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.scan_events;
+
+-- Production hardening, RLS, trusted scanners and face verification are kept
+-- in supabase/migrations/202607290001_security_hardening.sql so this base schema
+-- remains compatible with existing installations.

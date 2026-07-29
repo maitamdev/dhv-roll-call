@@ -1,273 +1,248 @@
+import { randomInt } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import type { NFCScanRequestPayload, NFCScanResponsePayload } from '@shared/index';
+import { getAuthProfile } from '@/lib/auth';
 import { hashCardUid, normalizeCardUid } from '@/lib/crypto';
-import { NFCScanRequestPayload, NFCScanResponsePayload } from '@shared/index';
+import { verifyScannerRequest } from '@/lib/scanner-security';
+import { supabaseAdmin } from '@/lib/supabase';
 
-export async function POST(req: NextRequest) {
-  const startTime = Date.now();
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LIVENESS_ACTIONS = ['BLINK', 'TURN_LEFT', 'TURN_RIGHT'] as const;
+
+function response(body: NFCScanResponsePayload, status = 200) {
+  return NextResponse.json(body, { status });
+}
+
+export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+  const rawBody = await request.text();
+  let body: NFCScanRequestPayload;
   try {
-    const body: NFCScanRequestPayload = await req.json();
-    let { sessionId, cardUid, deviceId, clientScannedAt, source, requestId } = body;
-    
-    // Auto strip '#' from sessionId in case user typed it from the UI
-    if (sessionId && sessionId.startsWith('#')) {
-      sessionId = sessionId.substring(1);
+    body = JSON.parse(rawBody);
+  } catch {
+    return response({ success: false, code: 'INVALID_REQUEST', message: 'Dữ liệu JSON không hợp lệ.' }, 400);
+  }
+
+  let trustedDevice: { id: string; deviceUuid: string; roomId: string | null } | null = null;
+  if (body.source === 'ANDROID_NFC') {
+    const trust = await verifyScannerRequest(request, rawBody);
+    if (trust.error || !trust.device) {
+      return response({ success: false, code: 'DEVICE_BLOCKED', message: trust.error || 'Máy quét không được tin cậy.' }, 403);
     }
-
-    // Validate deviceId format (must be UUID), otherwise set to undefined
-    const isUuidDevice = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceId || '');
-    if (!isUuidDevice) {
-      deviceId = undefined;
+    trustedDevice = trust.device;
+  } else {
+    const simulatorEnabled = process.env.NODE_ENV !== 'production' && process.env.ALLOW_WEB_SCANNER === 'true';
+    const profile = await getAuthProfile();
+    if (!simulatorEnabled || !profile || !['ADMIN', 'TRAINING_OFFICE'].includes(profile.role)) {
+      return response({ success: false, code: 'DEVICE_BLOCKED', message: 'Trình mô phỏng quét đã bị tắt.' }, 403);
     }
+  }
 
-    if (!sessionId || !cardUid || !requestId) {
-      return NextResponse.json<NFCScanResponsePayload>({
-        success: false,
-        code: 'CARD_NOT_FOUND',
-        message: 'Thiếu thông tin bắt buộc (sessionId, cardUid, requestId)',
-      }, { status: 400 });
-    }
+  const sessionId = typeof body.sessionId === 'string' ? body.sessionId.replace(/^#/, '') : '';
+  const requestId = typeof body.requestId === 'string' ? body.requestId : '';
+  const normalizedUid = normalizeCardUid(body.cardUid || '');
+  if (!sessionId || !UUID_PATTERN.test(requestId) || normalizedUid.length < 8) {
+    return response({ success: false, code: 'INVALID_REQUEST', message: 'Thiếu mã phiên, UID hoặc requestId hợp lệ.' }, 400);
+  }
 
-    // 1. Idempotency Check on scan_events via requestId
-    const { data: existingEvent } = await supabaseAdmin
-      .from('scan_events')
-      .select('id, result_code')
-      .eq('request_id', requestId)
-      .single();
-
-    if (existingEvent) {
-      return NextResponse.json<NFCScanResponsePayload>({
+  const { data: previousChallenge } = await supabaseAdmin
+    .from('face_verification_challenges')
+    .select('id, status, expires_at, liveness_action, challenge_type, students(student_code, full_name, avatar_url, classes(class_name))')
+    .eq('scan_request_id', requestId)
+    .maybeSingle();
+  if (previousChallenge) {
+    if (previousChallenge.status === 'PENDING' && Date.parse(previousChallenge.expires_at) > Date.now()) {
+      return response({
         success: true,
-        code: 'ALREADY_ATTENDED',
-        message: 'Lượt quẹt thẻ này đã được hệ thống ghi nhận trước đó.',
-      });
-    }
-
-    // 2. Validate Session (Support both UUID and Short Token)
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId);
-    const { data: session, error: sessionErr } = await supabaseAdmin
-      .from('attendance_sessions')
-      .select(`
-        id, status, late_after, scan_deadline, course_section_id,
-        course_sections (
-          id, section_code,
-          courses (course_name)
-        )
-      `)
-      .eq(isUuid ? 'id' : 'session_token', sessionId)
-      .single();
-
-    if (sessionErr || !session) {
-      return NextResponse.json<NFCScanResponsePayload>({
-        success: false,
-        code: 'SESSION_CLOSED',
-        message: 'Không tìm thấy phiên điểm danh.',
-      }, { status: 404 });
-    }
-
-    if (session.status !== 'OPEN') {
-      return NextResponse.json<NFCScanResponsePayload>({
-        success: false,
-        code: 'SESSION_CLOSED',
-        message: 'Phiên điểm danh hiện đang đóng hoặc đã kết thúc.',
-      }, { status: 400 });
-    }
-
-    // 3. Validate Device (if Android device ID provided)
-    if (deviceId && source === 'ANDROID_NFC') {
-      const { data: device } = await supabaseAdmin
-        .from('devices')
-        .select('status')
-        .eq('id', deviceId)
-        .single();
-
-      if (device && device.status === 'BLOCKED') {
-        return NextResponse.json<NFCScanResponsePayload>({
-          success: false,
-          code: 'DEVICE_BLOCKED',
-          message: 'Thiết bị quét này đã bị khóa quyền sử dụng.',
-        }, { status: 403 });
-      }
-    }
-
-    // 4. Hash Card UID & Lookup Card Owner
-    const normalizedUid = normalizeCardUid(cardUid);
-    const targetUidHash = hashCardUid(normalizedUid);
-
-    const { data: card, error: cardErr } = await supabaseAdmin
-      .from('student_cards')
-      .select(`
-        id, status, student_id,
-        students (
-          id, student_code, full_name, avatar_url, class_id,
-          classes (class_name)
-        )
-      `)
-      .eq('uid_hash', targetUidHash)
-      .single();
-
-    if (cardErr || !card || !card.students) {
-      // Log failed scan event
-      await supabaseAdmin.from('scan_events').insert({
-        request_id: requestId,
-        session_id: session.id,
-        card_uid_hash: targetUidHash,
-        device_id: deviceId || null,
-        client_scanned_at: clientScannedAt || new Date().toISOString(),
-        result_code: 'CARD_NOT_FOUND',
-        latency_ms: Date.now() - startTime,
-        metadata: { source, cardUidMasked: normalizedUid.substring(0, 4) + '****' }
-      });
-
-      return NextResponse.json<NFCScanResponsePayload>({
-        success: false,
-        code: 'CARD_NOT_FOUND',
-        message: 'Thẻ NFC chưa được đăng ký trong hệ thống!',
-      }, { status: 404 });
-    }
-
-    if (card.status !== 'ACTIVE') {
-      return NextResponse.json<NFCScanResponsePayload>({
-        success: false,
-        code: 'INVALID_CARD_STATUS',
-        message: `Thẻ NFC đang ở trạng thái (${card.status}), không thể điểm danh.`,
-      }, { status: 400 });
-    }
-
-    const studentData = Array.isArray(card.students) ? card.students[0] : card.students;
-    const studentId = studentData.id;
-    const studentClassData = Array.isArray(studentData.classes) ? studentData.classes[0] : studentData.classes;
-    const studentClassName = (studentClassData as any)?.class_name || '';
-
-    // 5. Check Enrollment in Course Section
-    const { data: enrollment } = await supabaseAdmin
-      .from('enrollments')
-      .select('id')
-      .eq('course_section_id', session.course_section_id)
-      .eq('student_id', studentId)
-      .single();
-
-    if (!enrollment) {
-      await supabaseAdmin.from('scan_events').insert({
-        request_id: requestId,
-        session_id: session.id,
-        card_uid_hash: targetUidHash,
-        device_id: deviceId || null,
-        client_scanned_at: clientScannedAt || new Date().toISOString(),
-        result_code: 'NOT_ENROLLED',
-        latency_ms: Date.now() - startTime,
-      });
-
-      return NextResponse.json<NFCScanResponsePayload>({
-        success: false,
-        code: 'NOT_ENROLLED',
-        message: `Sinh viên ${studentData.full_name} không thuộc lớp học phần này!`,
-      }, { status: 400 });
-    }
-
-    // 6. Check Existing Attendance Record
-    const { data: existingRecord } = await supabaseAdmin
-      .from('attendance_records')
-      .select('id, status, first_scan_at')
-      .eq('session_id', session.id)
-      .eq('student_id', studentId)
-      .single();
-
-    if (existingRecord && (existingRecord.status === 'PRESENT' || existingRecord.status === 'LATE')) {
-      return NextResponse.json<NFCScanResponsePayload>({
-        success: false,
-        code: 'ALREADY_ATTENDED',
-        message: `Sinh viên ${studentData.full_name} đã điểm danh trước đó!`,
-        student: {
-          id: studentData.id,
-          studentCode: studentData.student_code,
-          fullName: studentData.full_name,
-          className: studentClassName,
-          email: '',
-          avatarUrl: studentData.avatar_url || '',
-          status: 'ACTIVE'
+        code: 'FACE_VERIFICATION_REQUIRED',
+        message: 'Tiếp tục xác minh khuôn mặt.',
+        verification: {
+          challengeId: previousChallenge.id,
+          livenessAction: previousChallenge.liveness_action,
+          expiresAt: previousChallenge.expires_at,
         },
-        attendance: {
-          status: existingRecord.status as any,
-          recordedAt: existingRecord.first_scan_at
-        }
       });
     }
+    return response({ success: false, code: 'ALREADY_ATTENDED', message: 'Yêu cầu quét này đã được xử lý.' }, 409);
+  }
 
-    // 7. Calculate Status (PRESENT vs LATE)
-    const scanTime = clientScannedAt ? new Date(clientScannedAt) : new Date();
-    const lateThreshold = new Date(session.late_after);
-    const finalStatus = scanTime > lateThreshold ? 'LATE' : 'PRESENT';
+  const isSessionUuid = UUID_PATTERN.test(sessionId);
+  const { data: session } = await supabaseAdmin
+    .from('attendance_sessions')
+    .select('id, status, scheduled_start, scheduled_end, late_after, scan_deadline, course_section_id, room_id, face_verification_required, random_rescan_required, random_rescan_at')
+    .eq(isSessionUuid ? 'id' : 'session_token', sessionId)
+    .maybeSingle();
+  const now = new Date();
+  if (
+    !session ||
+    session.status !== 'OPEN' ||
+    now < new Date(new Date(session.scheduled_start).getTime() - 5 * 60_000) ||
+    now > new Date(session.scan_deadline)
+  ) {
+    return response({ success: false, code: 'SESSION_CLOSED', message: 'Phiên không mở hoặc đã ngoài thời gian điểm danh.' }, 400);
+  }
+  if (trustedDevice?.roomId && session.room_id && trustedDevice.roomId !== session.room_id) {
+    return response({ success: false, code: 'WRONG_ROOM', message: 'Máy quét không thuộc phòng của phiên học này.' }, 403);
+  }
 
-    // 8. Update / Insert Attendance Record
-    const nowIso = scanTime.toISOString();
-    if (existingRecord) {
-      const { error: updateErr } = await supabaseAdmin
-        .from('attendance_records')
-        .update({
-          session_id: session.id, // Force inclusion in Realtime payload for filter
-          student_id: studentId,
-          status: finalStatus,
-          first_scan_at: nowIso,
-          last_scan_at: nowIso,
-          device_id: deviceId || null,
-          source: source,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existingRecord.id);
-      if (updateErr) throw new Error(updateErr.message);
-    } else {
-      const { error: insertErr } = await supabaseAdmin
-        .from('attendance_records')
-        .insert({
-          session_id: session.id,
-          student_id: studentId,
-          status: finalStatus,
-          first_scan_at: nowIso,
-          last_scan_at: nowIso,
-          device_id: deviceId || null,
-          source: source
-        });
-      if (insertErr) throw new Error(insertErr.message);
-    }
-
-    // 9. Record Scan Event Audit
+  const cardUidHash = hashCardUid(normalizedUid);
+  const { data: card } = await supabaseAdmin
+    .from('student_cards')
+    .select('status, student_id, students(id, student_code, full_name, email, avatar_url, status, classes(class_name))')
+    .eq('uid_hash', cardUidHash)
+    .maybeSingle();
+  const student = card && (Array.isArray(card.students) ? card.students[0] : card.students);
+  if (!card || !student) {
     await supabaseAdmin.from('scan_events').insert({
       request_id: requestId,
       session_id: session.id,
-      card_uid_hash: targetUidHash,
-      device_id: deviceId || null,
-      client_scanned_at: nowIso,
-      result_code: 'ATTENDANCE_RECORDED',
-      latency_ms: Date.now() - startTime,
-      metadata: { finalStatus, studentCode: studentData.student_code, source }
+      card_uid_hash: cardUidHash,
+      device_id: trustedDevice?.id || null,
+      client_scanned_at: now.toISOString(),
+      result_code: 'CARD_NOT_FOUND',
+      latency_ms: Date.now() - startedAt,
+      risk_score: 40,
+      metadata: { source: body.source },
     });
+    return response({ success: false, code: 'CARD_NOT_FOUND', message: 'Thẻ chưa được đăng ký.' }, 404);
+  }
+  if (card.status !== 'ACTIVE' || student.status !== 'ACTIVE') {
+    return response({ success: false, code: 'INVALID_CARD_STATUS', message: 'Thẻ hoặc hồ sơ sinh viên không hoạt động.' }, 403);
+  }
 
-    return NextResponse.json<NFCScanResponsePayload>({
+  const { data: enrollment } = await supabaseAdmin
+    .from('enrollments')
+    .select('id')
+    .eq('course_section_id', session.course_section_id)
+    .eq('student_id', student.id)
+    .eq('status', 'ACTIVE')
+    .maybeSingle();
+  if (!enrollment) {
+    return response({ success: false, code: 'NOT_ENROLLED', message: 'Sinh viên không thuộc lớp học phần này.' }, 403);
+  }
+
+  const studentClass = Array.isArray(student.classes) ? student.classes[0] : student.classes;
+  const studentPayload = {
+    id: student.id,
+    studentCode: student.student_code,
+    fullName: student.full_name,
+    className: studentClass?.class_name || '',
+    email: student.email || '',
+    avatarUrl: student.avatar_url || '',
+    status: student.status,
+  };
+
+  const { data: existingRecord } = await supabaseAdmin
+    .from('attendance_records')
+    .select('status, first_scan_at, rescan_verified_at')
+    .eq('session_id', session.id)
+    .eq('student_id', student.id)
+    .in('status', ['PRESENT', 'LATE'])
+    .maybeSingle();
+  const needsRandomRescan = !!existingRecord &&
+    session.random_rescan_required &&
+    !!session.random_rescan_at &&
+    new Date(session.random_rescan_at) <= now &&
+    !existingRecord.rescan_verified_at;
+  if (existingRecord && !needsRandomRescan) {
+    return response({
+      success: false,
+      code: 'ALREADY_ATTENDED',
+      message: 'Sinh viên đã điểm danh trước đó.',
+      student: studentPayload,
+      attendance: { status: existingRecord.status, recordedAt: existingRecord.first_scan_at },
+    });
+  }
+
+  if (!session.face_verification_required) {
+    const finalStatus = now > new Date(session.late_after) ? 'LATE' : 'PRESENT';
+    const { error } = await supabaseAdmin.from('attendance_records').upsert({
+      session_id: session.id,
+      student_id: student.id,
+      status: finalStatus,
+      first_scan_at: now.toISOString(),
+      last_scan_at: now.toISOString(),
+      device_id: trustedDevice?.id || null,
+      source: body.source,
+      verification_method: 'NFC_ONLY',
+      updated_at: now.toISOString(),
+    }, { onConflict: 'session_id,student_id' });
+    if (error) return response({ success: false, code: 'SERVER_ERROR', message: 'Không thể ghi điểm danh.' }, 500);
+    await supabaseAdmin.from('scan_events').insert({
+      request_id: requestId, session_id: session.id, card_uid_hash: cardUidHash,
+      device_id: trustedDevice?.id || null, client_scanned_at: now.toISOString(),
+      result_code: 'ATTENDANCE_RECORDED', latency_ms: Date.now() - startedAt,
+      metadata: { verificationMethod: 'NFC_ONLY' },
+    });
+    return response({
       success: true,
       code: 'ATTENDANCE_RECORDED',
-      message: `Điểm danh thành công (${finalStatus === 'PRESENT' ? 'Có mặt' : 'Đi muộn'})`,
-      student: {
-        id: studentData.id,
-        studentCode: studentData.student_code,
-        fullName: studentData.full_name,
-        className: studentClassName,
-        email: '',
-        avatarUrl: studentData.avatar_url || '',
-        status: 'ACTIVE'
-      },
-      attendance: {
-        status: finalStatus as any,
-        recordedAt: nowIso
-      }
+      message: 'Đã ghi nhận điểm danh bằng thẻ.',
+      student: studentPayload,
+      attendance: { status: finalStatus, recordedAt: now.toISOString() },
     });
-
-  } catch (err: any) {
-    console.error('NFC Scan error:', err);
-    return NextResponse.json<NFCScanResponsePayload>({
-      success: false,
-      code: 'SESSION_CLOSED',
-      message: 'Lỗi hệ thống khi xử lý quẹt thẻ: ' + (err.message || ''),
-    }, { status: 500 });
   }
+
+  if (!trustedDevice) {
+    return response({ success: false, code: 'DEVICE_BLOCKED', message: 'Xác minh khuôn mặt chỉ chạy trên máy quét cố định.' }, 403);
+  }
+  const { data: biometric } = await supabaseAdmin
+    .from('biometric_profiles')
+    .select('status')
+    .eq('student_id', student.id)
+    .maybeSingle();
+  if (!biometric || biometric.status !== 'ACTIVE') {
+    await supabaseAdmin.from('fraud_alerts').insert({
+      student_id: student.id,
+      session_id: session.id,
+      device_id: trustedDevice.id,
+      alert_type: 'FACE_PROFILE_MISSING',
+      severity: 'MEDIUM',
+      risk_score: 50,
+      details: { requestId },
+    });
+    return response({
+      success: false,
+      code: 'FACE_NOT_ENROLLED',
+      message: 'Sinh viên chưa có hồ sơ khuôn mặt. Mời giảng viên xác minh thủ công.',
+      student: studentPayload,
+    }, 409);
+  }
+
+  const livenessAction = LIVENESS_ACTIONS[randomInt(LIVENESS_ACTIONS.length)];
+  const expiresAt = new Date(Date.now() + 45_000).toISOString();
+  const { data: challenge, error: challengeError } = await supabaseAdmin
+    .from('face_verification_challenges')
+    .insert({
+      scan_request_id: requestId,
+      session_id: session.id,
+      student_id: student.id,
+      device_id: trustedDevice.id,
+      card_uid_hash: cardUidHash,
+      liveness_action: livenessAction,
+      challenge_type: needsRandomRescan ? 'RANDOM_RESCAN' : 'INITIAL',
+      expires_at: expiresAt,
+    })
+    .select('id')
+    .single();
+  if (challengeError || !challenge) {
+    return response({ success: false, code: 'SERVER_ERROR', message: 'Không thể tạo thử thách khuôn mặt.' }, 500);
+  }
+  await supabaseAdmin.from('scan_events').insert({
+    request_id: requestId,
+    session_id: session.id,
+    card_uid_hash: cardUidHash,
+    device_id: trustedDevice.id,
+    client_scanned_at: now.toISOString(),
+    result_code: 'FACE_VERIFICATION_REQUIRED',
+    latency_ms: Date.now() - startedAt,
+    metadata: { livenessAction, challengeType: needsRandomRescan ? 'RANDOM_RESCAN' : 'INITIAL' },
+  });
+  return response({
+    success: true,
+    code: 'FACE_VERIFICATION_REQUIRED',
+    message: 'Thẻ hợp lệ. Hãy hoàn thành xác minh khuôn mặt.',
+    student: studentPayload,
+    verification: { challengeId: challenge.id, livenessAction, expiresAt },
+  });
 }

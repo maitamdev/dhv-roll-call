@@ -34,19 +34,20 @@ object KeystoreHelper {
     }
 
     fun signData(data: String): String {
-        try {
-            getOrCreateKeyPair()
-            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-            val privateKey = keyStore.getKey(KEY_ALIAS, null) as PrivateKey
+        getOrCreateKeyPair()
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        val privateKey = keyStore.getKey(KEY_ALIAS, null) as PrivateKey
+        val signature = Signature.getInstance("SHA256withRSA")
+        signature.initSign(privateKey)
+        signature.update(data.toByteArray(Charsets.UTF_8))
+        return Base64.getEncoder().encodeToString(signature.sign())
+    }
 
-            val signature = Signature.getInstance("SHA256withRSA")
-            signature.initSign(privateKey)
-            signature.update(data.toByteArray(Charsets.UTF_8))
-
-            val signedBytes = signature.sign()
-            return Base64.getEncoder().encodeToString(signedBytes)
-        } catch (e: Exception) {
-            return "UNSIGNED_FALLBACK"
-        }
+    fun getPublicKeyPem(): String {
+        getOrCreateKeyPair()
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        val encoded = Base64.getMimeEncoder(64, "\n".toByteArray())
+            .encodeToString(keyStore.getCertificate(KEY_ALIAS).publicKey.encoded)
+        return "-----BEGIN PUBLIC KEY-----\n$encoded\n-----END PUBLIC KEY-----"
     }
 }

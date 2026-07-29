@@ -1,247 +1,370 @@
 package vn.edu.dhv.tapattend.presentation
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import vn.edu.dhv.tapattend.R
+
+private val Navy = Color(0xFF10233F)
+private val Coral = Color(0xFFE85555)
+private val Canvas = Color(0xFFF4F7FA)
+private val Slate = Color(0xFF64748B)
+private val Border = Color(0xFFE2E8F0)
+private val Emerald = Color(0xFF16A36A)
+private val Amber = Color(0xFFE09A32)
 
 sealed class ScanUiState {
+    data class Waiting(val message: String) : ScanUiState()
     object Idle : ScanUiState()
     data class SuccessPresent(val name: String, val code: String, val className: String, val time: String) : ScanUiState()
     data class SuccessLate(val name: String, val code: String, val className: String, val time: String) : ScanUiState()
     data class AlreadyAttended(val name: String, val time: String) : ScanUiState()
+    data class OfflineQueued(val time: String) : ScanUiState()
     data class Error(val message: String) : ScanUiState()
 }
 
 @Composable
 fun NfcScanScreen(
-    courseName: String = "LẬP TRÌNH WEB",
-    className: String = "CT07PM",
-    roomCode: String = "A301",
-    presentCount: Int = 24,
-    totalCount: Int = 31,
+    courseName: String = "PHIÊN ĐIỂM DANH",
+    className: String = "CHƯA CÓ LỚP",
+    roomCode: String = "CHƯA GÁN",
+    presentCount: Int = 0,
+    totalCount: Int = 0,
+    sessionActive: Boolean = true,
     uiState: ScanUiState = ScanUiState.Idle,
     onResetState: () -> Unit = {}
 ) {
-    // Auto reset state after 1.5 seconds
     LaunchedEffect(uiState) {
-        if (uiState !is ScanUiState.Idle) {
-            delay(1500)
+        if (uiState !is ScanUiState.Idle && uiState !is ScanUiState.Waiting) {
+            delay(2200)
             onResetState()
         }
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0B132B))
-            .padding(24.dp)
+            .background(Canvas)
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+        Surface(
+            color = Navy,
+            shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-
-            // Header Section
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = courseName.uppercase(),
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "$className · $roomCode",
-                    color = Color(0xFF94A3B8),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color(0xFF1E293B),
-                    modifier = Modifier.padding(vertical = 8.dp)
+            Column(modifier = Modifier.padding(horizontal = 22.dp, vertical = 22.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Đã điểm danh: $presentCount/$totalCount",
-                        color = Color(0xFF10B981),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_brand_mark),
+                            contentDescription = "DHV TapAttend",
+                            modifier = Modifier
+                                .size(43.dp)
+                                .clip(RoundedCornerShape(11.dp))
+                        )
+                        Column(modifier = Modifier.padding(start = 11.dp)) {
+                            Text(
+                                text = courseName,
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Text(
+                                text = "$className  ·  PHÒNG $roomCode",
+                                color = Color(0xFFB6C2D1),
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                    Surface(
+                        color = Color.White.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                .background(if (sessionActive) Emerald else Amber, CircleShape)
+                            )
+                            Text(
+                                text = if (sessionActive) " ĐANG MỞ" else " CHỜ PHIÊN",
+                                color = if (sessionActive) Color(0xFF8CE3BE) else Color(0xFFFFD48A),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 18.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            AttendanceProgress(presentCount, totalCount)
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                when (uiState) {
+                    is ScanUiState.Waiting -> ResultCard(
+                        accent = Amber,
+                        eyebrow = "MÁY QUÉT ĐÃ SẴN SÀNG",
+                        name = uiState.message,
+                        meta = "Hệ thống tự kiểm tra phiên đang mở mỗi 10 giây",
+                        footer = "KHÔNG CẦN NHẬP MÃ PHIÊN"
+                    )
+                    is ScanUiState.Idle -> ReadyToScanCard()
+                    is ScanUiState.SuccessPresent -> ResultCard(
+                        accent = Emerald,
+                        eyebrow = "ĐIỂM DANH THÀNH CÔNG",
+                        name = uiState.name,
+                        meta = "MSSV ${uiState.code}  ·  ${uiState.className}",
+                        footer = "${uiState.time}  ·  CÓ MẶT"
+                    )
+                    is ScanUiState.SuccessLate -> ResultCard(
+                        accent = Amber,
+                        eyebrow = "ĐÃ GHI NHẬN ĐI MUỘN",
+                        name = uiState.name,
+                        meta = "MSSV ${uiState.code}  ·  ${uiState.className}",
+                        footer = "${uiState.time}  ·  ĐI MUỘN"
+                    )
+                    is ScanUiState.AlreadyAttended -> ResultCard(
+                        accent = Color(0xFF3B82F6),
+                        eyebrow = "ĐÃ ĐIỂM DANH TRƯỚC ĐÓ",
+                        name = uiState.name,
+                        meta = "Không tạo thêm bản ghi",
+                        footer = "Lần quét lúc ${uiState.time}"
+                    )
+                    is ScanUiState.OfflineQueued -> ResultCard(
+                        accent = Slate,
+                        eyebrow = "ĐÃ LƯU NGOẠI TUYẾN",
+                        name = "Lượt quét đang chờ đồng bộ",
+                        meta = "Dữ liệu sẽ tự gửi khi có mạng",
+                        footer = uiState.time
+                    )
+                    is ScanUiState.Error -> ResultCard(
+                        accent = Coral,
+                        eyebrow = "KHÔNG THỂ GHI NHẬN",
+                        name = uiState.message,
+                        meta = "Vui lòng kiểm tra thẻ và thử lại",
+                        footer = "LƯỢT QUÉT BỊ TỪ CHỐI"
                     )
                 }
             }
 
-            // Center Dynamic Area (Touch Box OR Result Card)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(280.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                when (uiState) {
-                    is ScanUiState.Idle -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .border(
-                                    width = 2.dp,
-                                    color = Color(0xFF334155),
-                                    shape = RoundedCornerShape(24.dp)
-                                )
-                                .background(Color(0xFF1E293B).copy(alpha = 0.5f), shape = RoundedCornerShape(24.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "CHẠM THẺ VÀO ĐIỆN THOẠI",
-                                    color = Color.White,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center
-                                )
-                                Text(
-                                    text = "MIFARE Classic 1K",
-                                    color = Color(0xFF64748B),
-                                    fontSize = 12.sp,
-                                    modifier = Modifier.padding(top = 8.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    is ScanUiState.SuccessPresent -> {
-                        ResultCard(
-                            backgroundColor = Color(0xFF16A34A),
-                            statusTitle = "✓ ĐIỂM DANH THÀNH CÔNG",
-                            name = uiState.name,
-                            code = uiState.code,
-                            className = uiState.className,
-                            time = "${uiState.time} · CÓ MẶT"
-                        )
-                    }
-
-                    is ScanUiState.SuccessLate -> {
-                        ResultCard(
-                            backgroundColor = Color(0xFFEA580C),
-                            statusTitle = "✓ ĐIỂM DANH (ĐI MUỘN)",
-                            name = uiState.name,
-                            code = uiState.code,
-                            className = uiState.className,
-                            time = "${uiState.time} · ĐI MUỘN"
-                        )
-                    }
-
-                    is ScanUiState.AlreadyAttended -> {
-                        ResultCard(
-                            backgroundColor = Color(0xFF2563EB),
-                            statusTitle = "ℹ ĐÃ ĐIỂM DANH TRƯỚC ĐÓ",
-                            name = uiState.name,
-                            code = "",
-                            className = "",
-                            time = "Lúc ${uiState.time}"
-                        )
-                    }
-
-                    is ScanUiState.Error -> {
-                        ResultCard(
-                            backgroundColor = Color(0xFFDC2626),
-                            statusTitle = "✕ TỪ CHỐI QUYỀN ĐIỂM DANH",
-                            name = uiState.message,
-                            code = "",
-                            className = "",
-                            time = "Thẻ không hợp lệ"
-                        )
-                    }
-                }
-            }
-
-            // Footer Indicators
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(text = "NFC: Đã bật", color = Color(0xFF10B981), fontSize = 12.sp)
-                Text(text = "Mạng: Trực tuyến", color = Color(0xFF10B981), fontSize = 12.sp)
-                Text(text = "Phiên: Đang mở", color = Color(0xFF10B981), fontSize = 12.sp)
+                SystemBadge("NFC", "SẴN SÀNG", Emerald, Modifier.weight(1f))
+                SystemBadge("MẠNG", "TRỰC TUYẾN", Emerald, Modifier.weight(1f))
+                SystemBadge("CAMERA", "SẴN SÀNG", Color(0xFF3B82F6), Modifier.weight(1f))
             }
-
         }
     }
 }
 
 @Composable
-fun ResultCard(
-    backgroundColor: Color,
-    statusTitle: String,
-    name: String,
-    code: String,
-    className: String,
-    time: String
-) {
+private fun AttendanceProgress(presentCount: Int, totalCount: Int) {
+    val progress = if (totalCount > 0) presentCount.toFloat() / totalCount else 0f
     Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = backgroundColor,
-        modifier = Modifier.fillMaxSize()
+        color = Color.White,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Border, RoundedCornerShape(16.dp))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column {
+                    Text("TIẾN ĐỘ ĐIỂM DANH", color = Slate, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "$presentCount / $totalCount sinh viên",
+                        color = Navy,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.padding(top = 3.dp)
+                    )
+                }
+                Text("${(progress * 100).toInt()}%", color = Emerald, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            LinearProgressIndicator(
+                progress = progress.coerceIn(0f, 1f),
+                color = Emerald,
+                trackColor = Color(0xFFE8EEF3),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .height(7.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReadyToScanCard() {
+    Surface(
+        color = Color.White,
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Border, RoundedCornerShape(22.dp))
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 30.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Box(
+                modifier = Modifier
+                    .size(118.dp)
+                    .border(1.dp, Coral.copy(alpha = 0.18f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(86.dp)
+                        .background(Coral.copy(alpha = 0.08f), CircleShape)
+                        .border(1.dp, Coral.copy(alpha = 0.22f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("NFC", color = Coral, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
+                }
+            }
             Text(
-                text = statusTitle,
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
+                text = "CHẠM THẺ VÀO ĐIỆN THOẠI",
+                color = Navy,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 22.dp)
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Giữ thẻ ổn định trong 1–2 giây",
+                color = Slate,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 7.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ResultCard(accent: Color, eyebrow: String, name: String, meta: String, footer: String) {
+    Surface(
+        color = Color.White,
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, accent.copy(alpha = 0.28f), RoundedCornerShape(22.dp))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .background(accent.copy(alpha = 0.1f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("✓", color = accent, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            Text(
+                text = eyebrow,
+                color = accent,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 1.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 17.dp)
+            )
             Text(
                 text = name,
-                color = Color.White,
-                fontSize = 24.sp,
+                color = Navy,
+                fontSize = 21.sp,
                 fontWeight = FontWeight.ExtraBold,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp)
             )
-            if (code.isNotEmpty()) {
-                Text(
-                    text = "MSSV: $code",
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-            if (className.isNotEmpty()) {
-                Text(
-                    text = "Lớp: $className",
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 14.sp
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = time,
-                color = Color.White.copy(alpha = 0.9f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold
+                text = meta,
+                color = Slate,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 7.dp)
             )
+            Spacer(modifier = Modifier.height(18.dp))
+            Surface(color = accent.copy(alpha = 0.08f), shape = RoundedCornerShape(50)) {
+                Text(
+                    text = footer,
+                    color = accent,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SystemBadge(label: String, value: String, tone: Color, modifier: Modifier = Modifier) {
+    Surface(
+        color = Color.White,
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.border(1.dp, Border, RoundedCornerShape(12.dp))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 9.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(label, color = Slate, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+            Text(value, color = tone, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }

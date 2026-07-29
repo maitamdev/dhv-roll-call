@@ -2,8 +2,14 @@
 
 import { supabaseAdmin } from '@/lib/supabase';
 import { hashCardUid, normalizeCardUid } from '@/lib/crypto';
+import { requirePageRole } from '@/lib/auth';
+
+async function requireCardStaff() {
+  return requirePageRole(['ADMIN', 'TRAINING_OFFICE']);
+}
 
 export async function fetchCardsAdmin() {
+  await requireCardStaff();
   const { data, error } = await supabaseAdmin
     .from('student_cards')
     .select(`
@@ -23,6 +29,7 @@ export async function fetchCardsAdmin() {
 }
 
 export async function fetchStudentsAdmin() {
+  await requireCardStaff();
   const { data, error } = await supabaseAdmin
     .from('students')
     .select(`
@@ -39,6 +46,7 @@ export async function fetchStudentsAdmin() {
 }
 
 export async function registerCardAdmin(studentId: string, uidHex: string) {
+  await requireCardStaff();
   if (!uidHex || !studentId) {
     return { success: false, error: 'Vui lòng nhập đủ thông tin.' };
   }
@@ -75,6 +83,7 @@ export async function registerCardAdmin(studentId: string, uidHex: string) {
 }
 
 export async function deleteCardAdmin(cardId: string) {
+  await requireCardStaff();
   const { error } = await supabaseAdmin
     .from('student_cards')
     .delete()

@@ -1,22 +1,13 @@
-import Sidebar from '@/components/Sidebar';
-import Navbar from '@/components/Navbar';
+import DashboardShell from '@/components/DashboardShell';
+import { requirePageRole } from '@/lib/auth';
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  await requirePageRole(['ADMIN', 'TRAINING_OFFICE', 'LECTURER']);
   return (
-    <div className="flex h-screen overflow-hidden bg-muted/20">
-      <Sidebar />
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        <Navbar />
-        <main className="flex-1 overflow-y-auto p-6 md:p-8">
-          <div className="max-w-7xl mx-auto space-y-6">
-            {children}
-          </div>
-        </main>
-      </div>
-    </div>
+    <DashboardShell>{children}</DashboardShell>
   );
 }
