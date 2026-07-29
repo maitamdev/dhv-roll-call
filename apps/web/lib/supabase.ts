@@ -21,7 +21,7 @@ if (typeof window !== 'undefined') {
 }
 
 // Client for server-side API routes with administrative privileges
-if (!supabaseServiceKey && process.env.NODE_ENV === 'production') {
+if (typeof window === 'undefined' && !supabaseServiceKey && process.env.NODE_ENV === 'production') {
   throw new Error('SUPABASE_SERVICE_ROLE_KEY must be configured in production.');
 }
 
