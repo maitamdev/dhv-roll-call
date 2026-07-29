@@ -108,13 +108,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const scanDeadline = new Date(session.scan_deadline);
-      if (
-        session.status === 'DRAFT' ||
-        session.status === 'CANCELLED' ||
-        Number.isNaN(scanDeadline.getTime()) ||
-        scanTime > scanDeadline
-      ) {
+      if (session.status === 'DRAFT' || session.status === 'CANCELLED') {
         results.push({ requestId, status: 'SESSION_CLOSED' });
         continue;
       }

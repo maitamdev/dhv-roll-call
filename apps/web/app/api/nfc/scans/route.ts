@@ -73,12 +73,7 @@ export async function POST(request: NextRequest) {
     .eq(isSessionUuid ? 'id' : 'session_token', sessionId)
     .maybeSingle();
   const now = new Date();
-  if (
-    !session ||
-    session.status !== 'OPEN' ||
-    now < new Date(new Date(session.scheduled_start).getTime() - 5 * 60_000) ||
-    now > new Date(session.scan_deadline)
-  ) {
+  if (!session || session.status !== 'OPEN') {
     return response({ success: false, code: 'SESSION_CLOSED', message: 'Phiên không mở hoặc đã ngoài thời gian điểm danh.' }, 400);
   }
   if (trustedDevice?.roomId && session.room_id && trustedDevice.roomId !== session.room_id) {
